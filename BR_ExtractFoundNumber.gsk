@@ -1,0 +1,70 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Extrakce èísla nálezu z logu
+# MacAuthor = Bohusz
+# MacFileName = BR_ExtractFoundNumber.gsk
+# MacUrl =
+#*******************************************
+TRANSACTION action=BEGIN
+SPEEDMODE status=on
+
+# Log types:
+#
+$ANNOUNCEMENT_LOG = "Announcement"
+$ARCHIVE_LOG = "Archive"
+$ATTENDED_LOG = "Attended"
+$DNF_LOG = "Didn't find it"
+$ENABLE_LOG = "Enable Listing"
+$FOUND_LOG = "Found it"
+$NEEDS_ARCHIVED_LOG = "Needs Archived"
+$NEEDS_MAINTENANCE_LOG = "Needs Maintenance"
+$OWNER_MAINTENANCE_LOG = "Owner Maintenance"
+$REVIEWER_LOG = "Post Reviewer Note"
+$PUBLISH_LOG = "Publish Listing"
+$DISABLE_LOG = "Temporarily Disable Listing"
+$UNARCHIVE_LOG = "Unarchive"
+$UPDATE_LOG = "Update Coordinates"
+$PHOTO_TAKEN_LOG = "Webcam Photo Taken"
+$WILL_ATTEND_LOG = "Will Attend"
+$WRITE_NOTE_LOG = "Write note"
+
+$i = 0
+GOTO position=TOP
+WHILE NOT($_EOL)
+  $i = $i + 1
+  SHOWSTATUS msg="$i/$_Count $d_code - $d_name"
+
+  $r = SQLITE("sql", "SELECT m.lText, l.lDate FROM logs l JOIN logMemo m ON l.lParent = m.lParent AND l.lLogId = m.lLogId WHERE l.lType = '$FOUND_LOG' AND l.lIsOwner AND l.lParent = '$d_Code'", "sqlget=0")
+  WHILE NOT($_SQLEOL)
+    $v_logText = SQLGET("lText")
+    $v_logDate = SQLTODATE(SQLGET("lDate"))
+
+    $v_foundNumber = 0
+    $v_text = REGEXREPLACE("^\s*(\[[^]]*\]\s*)*BETATEST\s*(\[/[^]]*\]\s*)*", $v_logText, "")
+    $v_grp1 = REGEXSUB("^(\d+)\.", $v_text, 1, 1)
+    IF $v_grp1 = ""
+      $v_grp1 = REGEXSUB("^#(\d+)\D", $v_text, 1, 1)
+    ENDIF
+    IF $v_grp1 <> ""
+      $v_foundNumber = VAL($v_grp1)
+    ENDIF
+
+    IF $v_foundNumber > 0 AND $v_foundNumber <> $d_UserSort
+      IF YESNO("Zmìnit aktuální èíslo nálezu $d_UserSort na $v_foundNumber?", "$d_code $d_name")
+        $d_UserSort = $v_foundNumber
+      ENDIF
+    ENDIF
+    IF $d_FoundByMeDate <> $v_logDate
+      $d_FoundByMeDate = $v_logDate
+    ENDIF    
+
+    SQLNEXT
+  ENDWHILE
+  SQLGETCLOSE
+
+  GOTO position=NEXT
+ENDWHILE
+ 
+SPEEDMODE status=off
+TRANSACTION action=END
+GOTO position=TOP

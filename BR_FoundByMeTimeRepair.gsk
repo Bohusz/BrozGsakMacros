@@ -1,0 +1,41 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Repair time of my find
+# MacAuthor = Bohusz
+# MacFileName = BR_FoundByMeTimeRepair.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_FoundByMeTimeRepair.gsk
+#*******************************************
+$NL = CHR(13)+CHR(10)
+$TIME_RE = "^(~?)(\d\d):(\d\d)$"
+
+$prompt = "O kolik (celých) hodin má být èas nálezu posunut?$NL$NL"+"Když byla keš nalezena tøeba v 19:30, ale v GSAK máte 21:30, tak zadejte -2."
+INPUT msg=$prompt default="0" delay=20
+
+$shift = val($result)
+IF $shift = 0
+  RETURN
+ENDIF
+
+TRANSACTION action=BEGIN
+
+GOTO position=TOP
+WHILE NOT($_EOL)
+  IF REGEX($TIME_RE, $d_userData)
+    $a = REGEXSUB($TIME_RE, $d_userData, 1, 1)
+    $h = REGEXSUB($TIME_RE, $d_userData, 1, 2)
+    $m = REGEXSUB($TIME_RE, $d_userData, 1, 3)
+
+    $hour = val($h) + $shift
+    IF $hour < 0
+      $hour = $hour+24
+      $d_foundByMeDate= $d_foundByMeDate- 1
+    ENDIF
+    $h = RIGHT("0$hour", 2)
+    $d_userData = "$a$h:$m"
+
+  ENDIF
+  GOTO position=NEXT
+ENDWHILE
+GOTO position=TOP
+
+TRANSACTION action=END
