@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 1.02
+# MacVersion = 1.03
 # MacDescription = PrepareFieldNotes
 # MacAuthor = roztocil
 # MacFileName = BR_PrepareFieldNotes.gsk
@@ -10,9 +10,12 @@
 #    - Dopnìno generování správného "Found it" textu podle druhu keše.
 # 1.02 2013-04-07:
 #    - Oprava generování èasové známky u nepøesnì urèených èasù nálezu.
+# 1.03 2014-02-18:
+#    - Podpora pro "nezaøazené" nálezy
 #*******************************************
 
 DECLARE var=$NULL type=NUMERIC
+$NEZARAZENO = "http://kacer-bob.blogspot.cz/2014/02/nezarazeno.html"
 $NODATE = [00000000]
 $NL = CHR(13) + CHR(10)
 
@@ -23,6 +26,11 @@ IF NOT($AppendToFile) AND FileExists($TargetFieldNotesFile)
   # zapíšeme BOM
   $result = AppendFile($TargetFieldNotesFile, UTF16("", "e"))
   GOSUB name=CheckFileOpResult
+ENDIF
+IF NOT($NotFiled)
+  $blog_url = $BlogUrl
+ELSE
+  $blog_url = $NEZARAZENO
 ENDIF
 
 GOTO position=TOP
@@ -77,9 +85,9 @@ WHILE NOT($_EOL)
     GOSUB name=LogTextSeparator
     $logText = "$logText$d_userData - "
   ENDIF
-  IF NOT(ISEMPTY($BlogUrl))
+  IF NOT(ISEMPTY($blog_url))
     GOSUB name=LogTextSeparator
-    $logText = "$logText[url=$BlogUrl][size=1][i]more...[/i][/size][/url]"
+    $logText = "$logText[url=$blog_url][size=1][i]more...[/i][/size][/url]"
   ENDIF
 
   $line = "$d_code,$timeStamp,$logType,"
@@ -195,10 +203,19 @@ Name = UtcOffset
   Width = 33
   Taborder = 9
 
+Name = NotFiled
+  Type = Checkbox
+  Height = 17
+  Left = 286
+  Top = 32
+  Width = 97
+  Taborder = 10
+  Caption = "Nezaøazené"
+
 Name = AppendToFile
   Type = Checkbox
   Height = 17
-  Left = 376
+  Left = 386
   Top = 32
   Width = 97
   Taborder = 10
