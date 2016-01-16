@@ -1,0 +1,12 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = BR_ROT13
+# MacAuthor = Bob
+# MacFileName = BR_ROT13.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_ROT13.gsk
+#*******************************************
+
+INPUT Msg="Zadejte text, který má být pøeveden ROT13"
+$Result = ROT13($Result)
+MSGOK Msg=$Result Caption="ROT13 - Pøevedený text"
+CLIP data=$Result

@@ -1,0 +1,16 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = BR_DisabledTag
+# MacAuthor = Bob
+# MacFileName = BR_DisabledTag.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_DisabledTag.gsk
+#*******************************************
+IF $d_status = "A"
+  SET $_Special = ""
+ENDIF
+IF $d_status = "T"
+  SET $_Special = "D"
+ENDIF
+IF $d_status = "X"
+  SET $_Special = "-"
+ENDIF

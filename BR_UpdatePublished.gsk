@@ -1,0 +1,37 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = BR_UpdatePublished
+# MacAuthor = roztocil
+# MacFileName = BR_UpdatePublished.gsk
+# MacUrl =
+#*******************************************
+TRANSACTION action=BEGIN
+SPEEDMODE status=on
+
+GOTO position=TOP
+WHILE NOT($_EOL)
+  SHOWSTATUS msg="$d_code - $d_name"
+  $v_published = CustomGet("Published")
+
+  TABLE active=LOGS scope=PARENT
+  WHILE NOT($_EOL)
+    IF $d_ltype = "Publish Listing"
+      $v_published = DATETOSQL($d_ldate)
+    ENDIF
+    GOTO position=NEXT
+  ENDWHILE
+
+  TABLE active=CACHES
+  $r = CustomPut("Published", $v_published)
+  IF LEFT($r, 7) = "*Error*"
+    SPEEDMODE status=off
+    TRANSACTION action=END
+    CANCEL msg=$r
+  ENDIF
+
+  GOTO position=NEXT
+ENDWHILE
+ 
+SPEEDMODE status=off
+TRANSACTION action=END
+GOTO position=TOP

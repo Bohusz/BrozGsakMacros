@@ -1,0 +1,8 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Founds caches found by me on the same they in year they had been published on.
+# MacAuthor = roztocil
+# MacFileName = BR_PublishedMatchesFound.gsk
+# MacUrl =
+#*******************************************
+MFILTER where=published <> '' AND SUBSTR(published, 6) = SUBSTR(foundByMeDate, 6)

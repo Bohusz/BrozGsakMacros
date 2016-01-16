@@ -1,0 +1,32 @@
+#*******************************************
+# MacVersion = 1.04
+# MacDescription = Sort By Found Date and Time
+# MacAuthor = Bob
+# MacFileName = BR_SortByFoundDateAndTime.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_SortByFoundDateAndTime.gsk
+#
+# Release Notes:
+#   1.01, 2010-12-05 - Pøi prvním spuštìní seøadí DESC.
+#   1.02, 2010-12-26 - Pøechod na SQLSORT, øadí i podle DNF.
+#   1.03, 2011-10-03 - odstranìní tildy pøi øazení
+#   1.04, 2011-10-16 - Místo MAX(foundByMe, dnfDate) použito IFNULL(NULLIF(foundByMeDate, ''), dnfDate),
+#                      protože jednou nastavené dnfDate prakticky nejde smazat a když je, tøeba omylem,
+#                      nastavím na pozdìjší datum než datum nálezu, tak se mi to øadí navždy blbì.
+#                    - Místo $_Quote použity apostrofy.
+#*******************************************
+IF NOT(VarExists("p_BR_SortByFoundDateAndTime_order"))
+  # promìnná popisuje aktuální øazení
+  $p_BR_SortByFoundDateAndTime_order = "undef"
+ENDIF
+
+IF ($p_BR_SortByFoundDateAndTime_order <> "DESC")
+  # GSAK automaticky pøidá ètvrtý paremetr k funkci REPLACE, tomu ale SQLite nerozumí.
+  # SQLSORT orderby=MAX(foundByMeDate, dnfDate) DESC, REPLACE(userData, "~", "") DESC
+  SQLSORT orderby="IFNULL(NULLIF(foundByMeDate, ''), dnfDate) DESC, REPLACE(userData, '~', '') DESC"
+  $p_BR_SortByFoundDateAndTime_order = "DESC"
+ELSE
+  # GSAK automaticky pøidá ètvrtý paremetr k funkci REPLACE, tomu ale SQLite nerozumí.
+  # SQLSORT orderby=MAX(foundByMeDate, dnfDate) ASC, REPLACE(userData, "~", "") ASC
+  SQLSORT orderby="IFNULL(NULLIF(foundByMeDate, ''), dnfDate) ASC, REPLACE(userData, '~', '') ASC"
+  $p_BR_SortByFoundDateAndTime_order = "ASC"
+ENDIF

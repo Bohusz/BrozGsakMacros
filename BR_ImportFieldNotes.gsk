@@ -1,0 +1,10 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Provede import Field Notes a pøesune èas z UserSort do UserData
+# MacAuthor = Bob
+# MacFileName = BR_ImportFieldNotes.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_ImportFieldNotes.gsk
+#*******************************************
+
+MACRO file="FieldNotesImportAndLog.gsk" varscope=LOCAL
+MACRO file="BR_FieldNotesImportCorrector.gsk" varscope=LOCAL

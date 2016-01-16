@@ -1,0 +1,66 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Aktualizace údajù o nálezech podle logu
+# MacAuthor = roztocil
+# MacFileName = BR_ExtractMyFindsDetails.gsk
+# MacUrl =
+#*******************************************
+VSUB status=ON
+
+$BLOG_FIELD = "MyBlogName"
+$NL = CHR(13)+CHR(10)
+
+IF IsEmpty(CustomConfig("Get", $BLOG_FIELD))
+   $err = CustomConfig("Add", "$BLOG_FIELD,string,Global,,,Standard")
+   IF NOT(IsEmpty($err))
+      CANCEL msg=$err
+   ENDIF
+ENDIF
+
+TRANSACTION action=BEGIN
+
+GOTO position=TOP
+WHILE NOT($_EOL)
+   $logFound = false
+   TABLE active=LOGS scope=PARENT
+   GOTO position=TOP
+   WHILE NOT($_EOL)
+      #MSGOK msg=" d_lIsOwner: $d_lIsOwner $NL d_lType: $d_lType"
+      IF $d_lIsOwner AND ($d_lType = "Attended" OR $d_lType = "Found it" OR $d_lType = "Webcan Photo Taken")
+         $logFound = true
+         $myDate  = $d_lDate
+         $myTime  = RegExSub("(~?\d?\d:\d\d)", $d_lText, 1, 1)
+         $myBlog  = RegExSub("http://kacer-bob.blogspot.cz/\d+/\d+/([-a-z0-9]+).html", $d_lText, 1, 1)
+         $myOrder = RegExSub("#\s*(\d+)", $d_lText, 1, 1)
+      ENDIF
+
+      GOTO position=NEXT
+   ENDWHILE
+   TABLE active=CACHES
+
+   #MSGOK msg=" logFound: $logFound$NL myOrder: $myOrder$NL myDate:  $myDate$NL myTime:  $myTime$NL myBlob:  $myBlog"
+   IF $logFound
+      IF NOT($d_Found)
+         $d_Found = true
+         $d_FoundByMeDate = $myDate
+      ENDIF
+      IF IsEmpty($d_UserData)
+         $d_UserData = $myTime
+      ENDIF
+      IF IsEmpty(CustomGet($BLOG_FIELD))
+         $err = CustomPut($BLOG_FIELD, $myBlog)
+         IF NOT(IsEmpty($err))
+            CANCEL msg=$err
+         ENDIF
+      ENDIF
+      IF $d_UserSort <= 0
+         $d_UserSort = Val($myOrder)
+      ENDIF
+   ENDIF
+
+   GOTO position=NEXT
+ENDWHILE
+
+TRANSACTION action=END
+
+

@@ -1,0 +1,35 @@
+#*******************************************
+# MacVersion = 1.02
+# MacDescription = Set 'state' field by tag in User Data 3
+# MacAuthor = Bob
+# MacFileName = BR_SetStateFromUser3.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_SetStateFromUser3.gsk
+#
+# 1.01, 2010-12-05 - Pøechod na SQL Lite v MFILTER
+# 1.02, 2012-03-04 - Pøidání "None" k hodnotám "Nil" a "" urèujícím nezadané jméno státu.
+#*******************************************
+OPTION explicit=YES
+DECLARE var=$TAG type=STRING
+DECLARE var=$currentFilter type=STRING
+
+$TAG = "\[st:([^\]]+)\]"
+$currentFilter = SaveFilter()
+
+MFilter Where=(State = "Nil" OR State = "None" OR State = "") AND g_RegEx($TAG, User3) join=AND
+IF $_FilterCount > 0
+  ShowStatus title="Set state on $_FilterCount caches" display=ON
+  #MsgOk msg="Set state on $_FilterCount caches"
+  GOTO position=TOP
+
+  WHILE NOT($_EOL)
+    $d_State = RegExSub($TAG, $d_User3, 1, 1)
+    ShowStatus msg="$d_Code - $d_Name: state = $d_State"
+    #MsgOk msg="$d_Code - $d_Name: state = $d_State"
+    GOTO position=NEXT
+  ENDWHILE
+  ShowStatus display=OFF
+ENDIF
+
+IF RestoreFilter($currentFilter, TRUE) = 0
+  #Filter ame="NONE"
+ENDIF

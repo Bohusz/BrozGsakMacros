@@ -1,0 +1,33 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = USort Order Number Check
+# MacAuthor = Bob
+# MacFileName = BR_USortOrderNumberRepair.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_USortOrderNumberCheck.gsk
+#*******************************************
+$savedFilter = SAVEFILTER()
+MFILTER where="found"
+SQLSORT orderBy="userSort ASC"
+
+$prev = 0
+$pocet = 0
+$pocetChyb = 0
+WHILE NOT($_EOL)
+  $pocet = $pocet + 1
+  $rozdil = $d_UserSort - $prev
+  IF $rozdil <> 1
+    $pocetChyb = $pocetChyb + 1
+    MSGOK msg="$d_code '$d_name' - poøadové èíslo $d_UserSort se od pøedchozího liší o $rozdil."
+  ENDIF
+  $prev = $d_UserSort
+  GOTO position=NEXT
+ENDWHILE
+
+$c = RESTOREFILTER($savedFilter, true)
+
+IF $pocetChyb = 0
+  MSGOK msg="Všech $pocet nalezených keší je oèíslováno správnì."
+ELSE
+  MSGOK msg="Z $pocet nalezených keší je $pocetChyb nesprávnì oèíslováno."
+ENDIF
+

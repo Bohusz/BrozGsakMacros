@@ -1,0 +1,19 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Seøadí keše podle pole USort a spustí generování statistik
+# MacAuthor = Bob
+# MacFileName = BR_USort-FindStatGen3.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_USort-FindStatGen3.gsk
+#*******************************************
+$CurrentSortOrder = $_OrderBy
+$SurrentSortBy = $_SortBy
+
+# Používám i deprekovaný SORT, protože FindStatGen3 nepøebírá nastavení z SQLSORT pøi generování mílníkù.
+SORT by="usersort" sequence=A
+SQLSORT orderBy="UserSort ASC"
+MACRO file="FindStatGen3.gsk"
+
+$SortData = Extract($SurrentSortBy , "=",1)
+$Sequence = Extract($SurrentSortBy , "=",2)
+SORT By=$SortData Sequence=$Sequence
+SQLSORT ORDERBY=$_OrderBy

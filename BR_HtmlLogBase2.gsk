@@ -1,0 +1,1352 @@
+#*******************************************
+# MacVersion = 2.04
+# MacDescription = Tabulka keší + my logs do blogger.com
+# MacAuthor = Bohusz
+# MacFileName = BR_HtmlLogBase2.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_HtmlLogBase.gsk
+#*******************************************
+# 1.10 (21.12.2010):
+#    - Pozadí logù se støídá svìtlejší/základní/svìtlejší/...
+# 1.11 (27.12.2010):
+#    - Problém s apostrofem v typu DNF logu - nenašla se ikona
+# 2.00 (19.3.2011):
+#    - Možnost vybrat keše podle data logu (doposud musely být
+#      vybrány pøedem).
+#    - Vstupní formuláø umožòující vybrat režim (podle data/výbìr),
+#      rozsah data a rozsah výsledku (hlavièka, tabulka, logy).
+# 2.01 (4.7.2011)
+#    - Možnost vybrat keše podle odkazu na blog v logu.
+# 2.02 (27.11.2011)
+#    - Výbìr blogu ze seznamu.
+# 2.03 (19.5.2013)
+#    - Za oddìlovaè záhlaví doplnìn prázdný øádek.
+# 2.04 (29.10.2013)
+#    - Podpora poro týmový odlov - èas ve tvaru HH:MM/HH:MM, kde první
+#      je èas spojení týmu a druhé èas odlovu jinou èástí týmu
+#*******************************************
+
+# inicializace
+$STAT = 1
+$ITEMS = 2
+$WORK = 3
+$BLOGS = "BLOGS"
+#                date          time          logtype cacheid logid
+#                  1             2              3       4      5
+$ITEM_FORMAT ="^([-.0-9]+) +(~?\d?\d:\d\d(/\d?\d:\d\d)?)?,([^,]+),([^,]+),([^,]*)$"
+#                date1        date2   text
+#                  1            2       3
+$BLOG_FORMAT ="^([-.0-9]+),([-.0-9]+),(.*)$"
+
+$NL = $_NewLine
+$LightBackground = "#d8e8c8"
+$OddLogRecord = TRUE
+# GOSUB name=initStat
+
+GOSUB name=VstupniFormular
+
+IF $rbtAll
+  GOSUB name=getLimittingDates
+ENDIF
+IF $rbtLogDate
+  $minDate = $datFrom
+  $maxDate = $datUpto
+ENDIF
+IF $rbtLogUrl
+  $p_url = $txtLogUrl
+  GOSUB name=initSearchByUrl
+ENDIF
+
+$savedFilter = saveFilter()
+$currentPosition = $d_Code
+#MFILTER where=code IN (SELECT lParent FROM logs WHERE date(lDate) BETWEEN date($datFrom) AND date($datUpto) AND lIsOwner) OR foundByMeDate BETWEEN date($datFrom) AND date($datUpto) OR dnfDate BETWEEN date($datFrom) AND date($datUpto)
+MFILTER where=code IN (SELECT lParent FROM logs WHERE date(lDate) BETWEEN date($minDate) AND date($maxDate) AND lIsOwner) OR foundByMeDate BETWEEN date($mindate) AND date($maxDate) OR dnfDate BETWEEN date($minDate) AND date($maxDate)
+
+GOSUB name=lookupData
+
+$html = ""
+
+IF $chbHeading
+  GOSUB name=processStats
+  $html = "$html$NL$r_stats"
+ENDIF
+
+IF $chbHeading AND $chbTable
+  $html = "$html$NL<!-- more -->$NL<br/>$NL"
+ENDIF
+
+IF $chbTable
+  GOSUB name=processTable
+  $html = "$html$NL$r_table"
+ENDIF
+
+IF $chbLogs
+  GOSUB name=processLogs
+  $html = "$html$NL$r_logs"
+ENDIF
+
+# $html = "<table border='1' style='width: 100%; border-collapse: collapse;'>$NL"
+# IF $minDate <> $maxDate
+#   $html = "$html<col width='40'/>"
+# ENDIF
+# $html = "$html<col width='20'/><col width='10'/><col width='40'/>$NL"
+# $myFoundItLog=0
+# 
+# # zpracování
+# GOTO position=TOP
+# $prevDate = [00000000]
+# WHILE NOT($_EOL)
+#   IF $_FilterActive OR $d_UserFlag
+#     GOSUB name=getMyFoundItLog
+# 
+#     $html = "$html<tr>"
+# 
+#     # datum
+#     IF $minDate <> $maxDate
+#       GOSUB name=onDNF_BEGIN
+#       IF $d_FoundByMeDate <> [00000000]
+#         IF $d_FoundByMeDate = $prevDate
+#             $html = "$html<td align='center'>&quot;</td>"
+#         ELSE
+#           $html = "$html<td align='right'>$d_FoundByMeDate</td>"
+#         ENDIF
+#         $prevDate = $d_FoundByMeDate
+#       ELSE
+#         IF $d_DNF
+#           IF $d_DNFDate = $prevDate
+#             $html = "$html<td align='center'>&quot;</td>"
+#           ELSE
+#             $html = "$html<td align='right'>$d_DNFDate</td>"
+#           ENDIF
+#           $prevDate = $d_DNFDate
+#         ENDIF
+#       ENDIF
+#       GOSUB name=onDNF_END
+#     ENDIF
+# 
+#     # èas + odkaz na log
+#     $html = "$html<td align='right'>"
+#     GOSUB name=onDNF_BEGIN
+#     IF $myFoundItLog <> 0
+#       $html = "$html<a href='http://www.geocaching.com/seek/log.aspx?LID=$myFoundItLog'>$d_UserData</a>"
+#     ELSE
+#       $html = "$html$d_UserData"
+#     ENDIF
+#     GOSUB name=onDNF_END
+#     $html = "$html</td>"
+# 
+#     # ikony keše
+#     $html = "$html<td>"
+#     GOSUB name=onDNF_BEGIN
+#     $html = "$html<img src='http://www.xlii.cz/img/gc/$d_CacheType.gif' alt='$d_CacheType' style='border: 0px; vertical-align: middle;'/>"
+#     GOSUB name=onDNF_END
+#     $html = "$html</td>"
+# 
+#     # GC kód + odkaz na listing
+#     $html = "$html<td>"
+#     GOSUB name=onDNF_BEGIN
+#     IF isEmpty($d_url)
+#       $html = "$html$d_Code"
+#     ELSE
+#       $html = "$html<a href='$d_url'>$d_Code</a>"
+#     ENDIF
+#     GOSUB name=onDNF_END
+#     $html = "$html</td>"
+# 
+#     # název keše (autor)
+#     $html = "$html<td>"
+#     GOSUB name=onDNF_BEGIN
+#     $html = "$html<b>$d_Name</b> ($d_PlacedBy)"
+#     GOSUB name=onDNF_END
+#     $html = "$html</td>"
+# 
+#     $html = "$html</tr>$NL"
+#     GOSUB name=countStat
+#   ENDIF
+#   GOTO position=NEXT
+# ENDWHILE
+# 
+# dokonèení
+# $html = "$html</table>$NL"
+# IF NOT($chbTable)
+#   $html = ""
+# ENDIF
+# 
+# IF $chbHeading
+#   GOSUB name=htmlStat
+#   $html = "$result$NL<!-- more -->$NL$html"
+# ENDIF
+# 
+# IF $chbLogs
+#   GOSUB name=getMyLogs
+#   $html = "$html$result"
+# ENDIF
+
+# úklid
+$x = restoreFilter($savedFilter, true) = 0
+$x = seek($currentPosition)
+
+# výsledek
+CLIP DATA=$html
+
+##################################################################################################################
+##                                                                                   P Ø Í P R A V A   D A T    ##
+##################################################################################################################
+
+BEGINSUB name=lookupData
+  array($ITEMS, 0) = "1024"
+  array($ITEMS, -1) = "0"
+  $g_maxItems = 0
+
+  GOTO position=TOP
+  WHILE NOT($_EOL)
+    $v_processed = FALSE
+    TABLE active=LOGS scope=PARENT
+    WHILE NOT($_EOL)
+      IF $d_lIsOwner
+        $p_text = $d_lText
+        GOSUB name=getBlogUrl
+        $v_url = $r_url
+
+        IF $rbtLogUrl AND $v_url <> $txtLogUrl
+          $v_processed = TRUE
+        ELSE
+          $v_time = regexsub("(\d{1,2}:\d{2})", $d_lText, 1, 1)
+          IF len($v_time) = 4
+            $v_time = "0$v_time"
+          ENDIF
+          $p_type = $d_lType
+          GOSUB name=normalizeLogType
+          $v_data = dateToString($d_lDate) + " $v_time,$r_type,$d_lParent,$d_lLogid"
+          $g_maxItems = $g_maxItems + 1
+          SHOWSTATUS msg="[FETCH] #$g_maxItems: $d_code, LOGGED"
+          array($ITEMS, $g_maxItems) = $v_data
+          $v_processed = TRUE
+        ENDIF
+      ENDIF
+      GOTO position=NEXT
+    ENDWHILE
+    TABLE active=CACHES
+
+    IF NOT($v_processed)
+      $v_type = ""
+      IF $d_found
+        $v_type = "FOUND"
+        $v_date = $d_FoundByMeDate
+      ENDIF
+      IF $d_DNF
+        $v_type = "DNF"
+        $v_date = $d_DNFDate
+      ENDIF
+      IF $v_type <> ""
+        $v_time = $d_userData
+        IF len($v_time) = 4
+          $v_time = "0$v_time"
+        ENDIF
+        $v_data = dateToString($v_date) + " $v_time,$v_type,$d_code,"
+        $g_maxItems = $g_maxItems + 1
+        SHOWSTATUS msg="[FETCH] #$g_maxItems: $d_code, NO LOG"
+        array($ITEMS, $g_maxItems) = $v_data
+      ENDIF
+    ENDIF
+
+    GOTO position=NEXT
+  ENDWHILE
+
+  # seøadíme data: Ascending, String, Ignore case
+  $p_array = $ITEMS
+  $p_count = $g_maxItems
+  GOSUB name=shrinkArray
+  array($ITEMS, -2) = "ASI"
+ENDSUB
+
+##################################################################################################################
+##                                                                                       S T A T I S T I K Y    ##
+##################################################################################################################
+
+BEGINSUB name=processStats
+  GOSUB name=calculateStats
+  GOSUB name=htmlStats
+  $r_stats = $result
+ENDSUB
+
+BEGINSUB name=calculateStats
+  TABLE active=CACHES
+
+  array($STAT, 0) = "256"
+  array($STAT, -1) = "0"
+  $g_date0 = [99991231]
+  $g_date9 = [00000000]
+
+  $v_index = 1
+  WHILE $v_index <= $g_maxItems
+    $v_item = array($ITEMS, $v_index)
+    SHOWSTATUS msg="[STATS] #$v_index: $v_item"
+    $v_date = stringToDate(regexsub($ITEM_FORMAT, $v_item, 1, 1))
+    $v_lgTyp = regexsub($ITEM_FORMAT, $v_item, 1, 4)
+    $v_cache = regexsub($ITEM_FORMAT, $v_item, 1, 5)
+    SHOWSTATUS msg="[STATS] #$v_index: $v_cache, $v_lgTyp"
+
+    IF NOT(seek($v_cache))
+      $v_msg = "Uh, oh! Keš $v_cache na pozici $v_index seznamu nebyla nalezena v databázi. To pøece není možné!"
+      msgOk msg=$v_msg caption="Makro bude ukonèeno"
+      RETURN
+    ENDIF
+    BEGINCASE
+      CASE $v_lgTyp = "FOUND"
+        array($STAT, 1) = numToStr(val(array($STAT, 1)) + 1)
+        array($STAT, asc($d_cacheType)) = numToStr(val(array($STAT, asc($d_cacheType))) + 1)
+      CASE $v_lgTyp = "DNF"
+        array($STAT, 2) = numToStr(val(array($STAT, 2)) + 1)
+      OTHERWISE
+        $v_date = [00000000]
+    ENDCASE
+    IF $v_date <> [00000000]
+      IF $v_date < $g_date0
+        $g_date0 = $v_date
+      ENDIF
+      IF $v_date > $g_date9
+        $g_date9 = $v_date
+      ENDIF
+    ENDIF
+
+    $v_index = $v_index + 1
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=htmlStats
+  IF array($STAT, 1) = "0" AND array($STAT, 2) = "0"
+    EXITSUB
+  ENDIF
+
+  $result = "<table border='1' style='width: 100%; border-collapse: collapse;'>$NL"
+  IF $minDate <> $maxDate
+    $result = "$result<col width='120'/><col width='70'/>$NL"
+  ELSE
+    $result = "$result<col width='100'/><col width='70'/>$NL"
+  ENDIF
+  $result = "$result<tr>$NL"
+  $result = "$result<td style='color: white; background-color: #F87431;' align='center'><b>"
+  IF $g_date0 <> $g_date9
+    IF substr(dateToString($g_date0), 1, 4) <> substr(dateToString($g_date9), 1, 4)
+      $result = "$result$g_date0"
+    ELSE
+      $result = $result + NumToStr(Val(substr(dateToString($g_date0), 7, 2))) + "."
+      IF substr(dateToString($g_date0), 5, 2) <> substr(dateToString($g_date9), 5, 2)
+        $result = $result + NumToStr(Val(substr(dateToString($g_date0), 5, 2))) + "."
+      ENDIF
+    ENDIF
+    $result = "$result - "
+  ENDIF
+  $result = "$result$g_date9</b></td>$NL"
+  $result = "$result<td style='background-color: white'>"
+
+  IF array($STAT, 1) <> "0"
+    $result = "$result<img src='http://www.xlii.cz/img/gc/f.png' alt='[FOUND]' style='border: 0px; vertical-align: middle;'/>"
+    $result = "$result " + array($STAT, 1) + " "
+  ENDIF
+  IF array($STAT, 2) <> "0"
+    $result = "$result<img src='http://www.xlii.cz/img/gc/dnf.gif' alt='[DNF]' style='border: 0px; vertical-align: middle;'/>"
+    $result = " $result " + array($STAT, 2)
+  ENDIF
+  $result = "$result</td>$NL"
+  $result = "$result<td style='background-color: white'>"
+
+  $i = asc("A")
+  WHILE $i <= asc("Z")
+    IF array($STAT, $i) <> "0"
+      $result = "$result"
+      $result = "$result<img src='http://www.xlii.cz/img/gc/" + chr($i) + ".gif' alt='" + chr($i)+ "' style='border: 0px; vertical-align: middle;'/>"
+      $result = "$result " + array($STAT, $i) + " "
+    ENDIF
+    $i = $i + 1
+  ENDWHILE
+  IF NOT(ISEMPTY($result))
+    $result = "$result</td>$NL"
+    $result = "$result</tr></table>"
+  ENDIF
+ENDSUB
+
+##################################################################################################################
+##                                                                                             T A B U L K A    ##
+##################################################################################################################
+
+BEGINSUB name=processTable
+  TABLE active=CACHES
+
+  $r_table = "<table border='1' style='width: 100%; border-collapse: collapse;'>$NL"
+  IF $minDate <> $maxDate
+    $r_table = "$r_table<col width='40'/>"
+  ENDIF
+  $r_table = "$r_table<col width='20'/><col width='10'/><col width='40'/>$NL"
+
+  $v_prevDate = [00000000]
+  $v_index = 1
+  WHILE $v_index <= $g_maxItems
+    $v_item = array($ITEMS, $v_index)
+    $v_date = stringToDate(regexsub($ITEM_FORMAT, $v_item, 1, 1))
+    $v_time = regexsub($ITEM_FORMAT, $v_item, 1, 2)
+    $v_lgTyp = regexsub($ITEM_FORMAT, $v_item, 1, 4)
+    $v_cache = regexsub($ITEM_FORMAT, $v_item, 1, 5)
+    $v_logid = regexsub($ITEM_FORMAT, $v_item, 1, 6)
+    SHOWSTATUS msg="[TABLE] #$v_index: $v_cache, $v_date $v_time, $v_lgTyp, $logid"
+
+    $p_date = $v_date
+    $p_time = $v_time
+    $p_lgTyp = $v_lgTyp
+    $p_cache = $v_cache
+    $p_logid = $v_logid
+    $p_prevDate = $v_prevDate
+    GOSUB name=processTableItem
+    
+    $v_prevDate = $p_date
+    $r_table = "$r_table$NL$r_item"
+
+    $v_index = $v_index + 1
+  ENDWHILE
+
+  $r_table = "$r_table</table>$NL"
+ENDSUB
+
+BEGINSUB name=processTableItem
+  IF NOT(seek($p_cache))
+    $v_msg = "Uh, oh! Keš $v_cache na pozici $v_index seznamu nebyla nalezena v databázi. To pøece není možné!"
+    msgOk msg=$v_msg caption="Makro bude ukonèeno"
+    RETURN
+  ENDIF
+  GOSUB name=htmlTableItem
+ENDSUB
+
+BEGINSUB name=htmlTableItem
+  $r_item = "<tr>"
+
+  # datum
+  IF $minDate <> $maxDate
+    GOSUB name=itemStyle_BEGIN
+    IF $p_date <> $p_prevDate
+      $r_item = "$r_item<td align='right'>$p_date</td>"
+    ELSE
+      $r_item = "$r_item<td align='center'>&quot;</td>"
+    ENDIF
+    GOSUB name=itemStyle_END
+  ENDIF
+
+  # èas + odkaz na log
+  $r_item = "$r_item<td align='right'>"
+  GOSUB name=itemStyle_BEGIN
+  IF NOT(isempty($p_logid))
+    $r_item = "$r_item<a href='http://www.geocaching.com/seek/log.aspx?LID=$p_logid'>$p_time</a>"
+  ELSE
+    $r_item = "$r_item$p_time"
+  ENDIF
+  GOSUB name=itemStyle_END
+  $r_item = "$r_item</td>"
+
+  # ikony keše
+  $r_item = "$r_item<td>"
+  GOSUB name=itemStyle_BEGIN
+  $r_item = "$r_item<img src='http://www.xlii.cz/img/gc/$d_CacheType.gif' alt='$d_CacheType' style='border: 0px; vertical-align: middle;'/>"
+  GOSUB name=itemStyle_END
+  $r_item = "$r_item</td>"
+
+  # GC kód + odkaz na listing
+  $r_item = "$r_item<td>"
+  GOSUB name=itemStyle_BEGIN
+  IF isEmpty($d_url)
+    $r_item = "$r_item$d_Code"
+  ELSE
+    $r_item = "$r_item<a href='$d_url'>$d_Code</a>"
+  ENDIF
+  GOSUB name=itemStyle_END
+  $r_item = "$r_item</td>"
+
+  # název keše (autor)
+  $r_item = "$r_item<td>"
+  GOSUB name=itemStyle_BEGIN
+  $r_item = "$r_item<b>$d_Name</b> ($d_PlacedBy)"
+  GOSUB name=itemStyle_END
+  $r_item = "$r_item</td>"
+
+  $r_item = "$r_item</tr>$NL"
+ENDSUB
+
+BEGINSUB name=itemStyle_BEGIN
+  IF $d_DNF
+    $r_item = "$r_item<i><font color='#808080'>"
+  ENDIF
+ENDSUB
+
+BEGINSUB name=itemStyle_END
+  IF $d_DNF
+    $r_item = "$r_item</font></i>"
+  ENDIF
+ENDSUB
+
+##################################################################################################################
+##                                                                                                   L O G Y    ##
+##################################################################################################################
+
+BEGINSUB name=processLogs
+  $r_logs = ""
+
+  $v_index = 1
+
+  WHILE $v_index <= $g_maxItems
+    $v_item = array($ITEMS, $v_index)
+    $v_date = stringToDate(regexsub($ITEM_FORMAT, $v_item, 1, 1))
+    $v_time = regexsub($ITEM_FORMAT, $v_item, 1, 2)
+    $v_lgTyp = regexsub($ITEM_FORMAT, $v_item, 1, 4)
+    $v_cache = regexsub($ITEM_FORMAT, $v_item, 1, 5)
+    $v_logid = regexsub($ITEM_FORMAT, $v_item, 1, 6)
+    SHOWSTATUS msg="[LOGS] #$v_index: $v_cache, $v_date $v_time, $v_lgTyp, $logid"
+
+    # log nemusí vždy existovat - možná ještì nebyl naèten, pak generujeme jen z atributù záznamu keše v databázi
+    IF NOT(isempty($v_logid))
+      TABLE active=CACHES
+      IF NOT(seek($v_cache))
+        $v_msg = "Uh, oh! Keš $v_cache na pozici $v_index seznamu nebyla nalezena v databázi. To pøece není možné!"
+        msgOk msg=$v_msg caption="Makro bude ukonèeno"
+        RETURN
+      ENDIF
+
+      TABLE active=LOGS scope=PARENT
+      IF NOT(seek($v_logId))
+        $v_msg = "Uh, oh! Log $v_logId pro keš $v_cache na pozici $v_index seznamu nebyl nalezen v databázi. To pøece není možné!"
+        msgOk msg=$v_msg caption="Makro bude ukonèeno"
+        RETURN
+      ENDIF
+
+      $p_date = $v_date
+      $p_time = $v_time
+      $p_type = $v_lgTyp
+      GOSUB name=htmlLog
+
+      $r_logs = "$r_logs$r_logHtml$NL"
+    ENDIF
+
+    $v_index = $v_index + 1
+  ENDWHILE
+
+  TABLE active=CACHES
+ENDSUB
+
+# htmlLog: Pøevede aktuálnì vybraný log do HTML.
+#
+# Pøi zpracování dáváme pøednost údajùm pøedaným jako parametry, protože mohly být oproti skuteènosti z nìjakého dùvodu zmìnìny.
+#
+# @param $p_date  Den, ke kterému mìl být log vytvoøen.
+# @param $p_time  Èas, ke kterému mìl být log vytvoøen.
+# @param $p_type  Typ logu.
+#
+# @global $OddLogRecord  Je log sudý nebo lichý? Má vliv na HTML vizualizaci.
+#
+# @return $r_logHtml
+#
+BEGINSUB name=htmlLog
+  $r_logHtml = ""
+  IF $OddLogRecord
+    $r_logHtml = "$r_logHtml<div style='background: $LightBackground; outline: 5pt solid $LightBackground;'>"
+  ELSE
+    $r_logHtml = "$r_logHtml<div>"
+  ENDIF
+  $OddLogRecord = NOT($OddLogRecord)
+  $p_iconType = $p_type
+  GOSUB name=logIcon
+
+  $r_logHtml = "$r_logHtml<p><img src='$r_iconUrl' alt=" + QUOTE("[$p_type]") + " style='border: 0px; vertical-align: middle;'/><b>"
+  IF $minDate <> $maxDate
+    $getMyLogRecord_result = "$r_logHtml " + dateFormat($p_date)
+  ENDIF
+  $r_logHtml = "$r_logHtml $d_Code - $d_Name</b> ($d_OwnerName, placed $d_PlacedDate"
+  IF $d_OwnerName <> $d_PlacedBy
+    $r_logHtml = "$r_logHtml by $d_PlacedBy"
+  ENDIF
+  $r_logHtml = "$r_logHtml)</p>$NL"
+      
+  $p_text =$d_lText
+  GOSUB name=bbcodeToHtml
+  $r_logHtml = "$r_logHtml<p>$r_text</p>$NL</div>$NL"
+ENDSUB
+
+##################################################################################################################
+##                                                                                             P O M Ù C K Y    ##
+##################################################################################################################
+
+BEGINSUB name=normalizeLogType
+  BEGINCASE
+  CASE $p_type = "Announcement"
+       $r_type = "ANNOUNCEMENT"
+  CASE $p_type = "Archive"
+       $r_type = "ARCHIVED"
+  CASE $p_type = "Attended"
+       $r_type = "ATTENDED"
+  CASE $p_type = "Didn't find it"
+       $r_type = "DNF"
+  CASE $p_type = "Enable Listing"
+       $r_type = "ENABLED"
+  CASE $p_type = "Found it"
+       $r_type = "FOUND"
+  CASE $p_type = "Needs Archived"
+       $r_type = "ARCHIVE_REQUEST"
+  CASE $p_type = "Needs Maintenance"
+       $r_type = "MAINTENANCE_REQUEST"
+  CASE $p_type = "Owner Maintenance"
+       $r_type = "MAINTENANCED"
+  CASE $p_type = "Post Reviewer Note"
+       $r_type = "REVIEWER_NOTE"
+  CASE $p_type = "Publish Listing"
+       $r_type = "PUBLISHED"
+  CASE $p_type = "Retract Listing"
+       $r_type = "RETRACTED"
+  CASE $p_type = "Temporarily Disable Listing"
+       $r_type = "DISABLED"
+  CASE $p_type = "Unarchive"
+       $r_type = "UNARCHIVED"
+  CASE $p_type = "Update Coordinates"
+       $r_type = "UPDATED"
+  CASE $p_type = "Webcam Photo Taken"
+       $r_type = "PHOTO_TAKEN"
+  CASE $p_type = "Will Attend"
+       $r_type = "WILL_ATTEND"
+  CASE $p_type = "Write note"
+       $r_type = "NOTE"
+  ENDCASE
+ENDSUB
+
+BEGINSUB name=logIcon
+  $r_iconUrl = "http://www.xlii.cz/img/gc/icon_$p_iconType.png"
+ENDSUB
+
+BEGINSUB name=bbcodeToHtml
+  $r_text = $p_text
+
+  #Odstranìní nechtìného textu
+  #
+  $r_text = RegExReplace("\n*This entry was edited by [^.]+\.", $r_text, "")
+  $r_text = RegExReplace("\[url\s*=\s*http://kacer-bob\..*more\.\.\..*\[/url\]", $r_text, "")
+
+  # Smajlíky
+  #
+  $r_text = Replace("[:)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile.gif' alt=':)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_big.gif' alt=':D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[8D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_cool.gif' alt='8D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:I]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blush.gif' alt=':I' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:P]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_tongue.gif' alt=':P' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[}:)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_evil.gif' alt='}:)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[;)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_wink.gif' alt=';)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:o)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_clown.gif' alt=':o' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[B)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blackeye.gif' alt='B)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[8]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_8ball.gif' alt='8' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:(]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sad.gif' alt=':(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[8)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shy.gif' alt='8)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:O]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shock.gif' alt=':O' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:(!]", "<img src='http://www.xlii.cz/img/gc/icon_smile_angry.gif' alt=':(!' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[xx(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[|)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sleepy.gif' alt='|)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:X]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_kisses.gif' alt=':X' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[^]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_approve.gif' alt='^' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[V]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_dissapprove.gif' alt='v' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[?]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_question.gif' alt='?' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+
+  # HTML - styly
+  $r_text = Replace("[b]",  "<b>",  $r_text)
+  $r_text = Replace("[/b]", "</b>", $r_text)
+  $r_text = Replace("[i]",  "<i>",  $r_text)
+  $r_text = Replace("[/i]", "</i>", $r_text)
+  $r_text = Replace("[u]",  "<u>",  $r_text)
+  $r_text = Replace("[/u]", "</u>", $r_text)
+
+  $r_text = Replace("[highlight]",  "<i>",  $r_text)
+  $r_text = Replace("[/highlight]", "</i>", $r_text)
+  $r_text = Replace("[code]",  "<pre>",  $r_text)
+  $r_text = Replace("[/code]", "</pre>", $r_text)
+
+  $r_text = Replace("[p]",  "<p>",  $r_text)
+  $r_text = Replace("[/p]", "</p>", $r_text)
+  $r_text = Replace("[br]",  "<br/>",  $r_text)
+
+  # HTML - barva textu
+  $r_text = Replace("[black]",  "<font color='black'>",  $r_text)
+  $r_text = Replace("[/black]", "</font>", $r_text)
+  $r_text = Replace("[blue]",  "<font color='blue'>",  $r_text)
+  $r_text = Replace("[/blue]", "</font>", $r_text)
+  $r_text = Replace("[red]",  "<font color='red'>",  $r_text)
+  $r_text = Replace("[/red]", "</font>", $r_text)
+  $r_text = Replace("[purple]",  "<font color='purple'>",  $r_text)
+  $r_text = Replace("[/purple]", "</font>", $r_text)
+  $r_text = Replace("[pink]",  "<font color='pink'>",  $r_text)
+  $r_text = Replace("[/pink]", "</font>", $r_text)
+  $r_text = Replace("[orange]",  "<font color='orange'>",  $r_text)
+  $r_text = Replace("[/orange]", "</font>", $r_text)
+  $r_text = Replace("[yellow]",  "<font color='yellow'>",  $r_text)
+  $r_text = Replace("[/yellow]", "</font>", $r_text)
+  $r_text = Replace("[green]",  "<font color='green'>",  $r_text)
+  $r_text = Replace("[/green]", "</font>", $r_text)
+  $r_text = Replace("[white]",  "<font color='white'>",  $r_text)
+  $r_text = Replace("[/white]", "</font>", $r_text)
+
+  # HTML - zarovnání textu
+  $r_text = Replace("[left]",  "<div align='left'>",  $r_text)
+  $r_text = Replace("[/left]", "</div>", $r_text)
+  $r_text = Replace("[center]",  "<div align='center'>",  $r_text)
+  $r_text = Replace("[/center]", "</div>", $r_text)
+  $r_text = Replace("[right]",  "<div align='right'>",  $r_text)
+  $r_text = Replace("[/right]", "</div>", $r_text)
+
+  # HTML - velikost textu
+  $r_text = RegExReplace("\[size\s*=\s*", $r_text, "<font size=") 
+  $r_text = Replace("[/size]", "</font>", $r_text) 
+
+  # HTML - odkazy
+  $r_text = RegExReplace("\[url\s*=\s*", $r_text, "<a href=") 
+  $r_text = Replace("[/url]", "</a>", $r_text) 
+
+  $r_text = Replace("]", ">", $r_text) 
+
+  # Konce øádkù
+  $r_text = RegExReplace("<p>(\r*\n)+", $r_text, "<p>$NL") 
+  $r_text = RegExReplace("(\r*\n)+</p>", $r_text, "</p>") 
+  $r_text = RegExReplace("(\r*\n)+", $r_text, "<br/>$NL") 
+ENDSUB
+
+# Zmìní velikost pole na zadaný poèet prvkù.
+# Nutné napø. tehdy, když potøebujete setøídit neúplnì zaplnìné pole.
+#
+# @param $p_array  Index pole, které má být zkráceno.
+# @param $p_count  Poèet prvkù zkracovaného pole.
+BEGINSUB name=shrinkArray
+  array($WORK, 0) = "$p_count"
+  $i = 1
+  WHILE $i <= $p_count
+    array($WORK, $i) = array($p_array, $i)
+    $i = $i + 1
+  ENDWHILE
+
+  array($p_array, 0) = "$p_count"
+  $i = 1
+  WHILE $i <= $p_count
+    array($p_array, $i) = array($WORK, $i)
+    $i = $i + 1
+  ENDWHILE
+
+  array($WORK, 0) = "0"
+ENDSUB
+##################################################################################################################
+
+BEGINSUB name=getLimittingDates
+   $minDate = [99991231]
+   $maxDate = [00000000]
+
+   GOTO position=TOP
+   WHILE NOT($_EOL)
+      IF ($_FilterActive OR $d_UserFlag) AND $d_FoundByMeDate <> [00000000]
+         IF $d_FoundByMeDate < $minDate
+            $minDate = $d_FoundByMeDate
+         ENDIF
+         IF $d_FoundByMeDate > $maxDate
+            $maxDate = $d_FoundByMeDate
+         ENDIF
+      ENDIF
+      GOTO position=NEXT
+   ENDWHILE
+ENDSUB
+
+BEGINSUB name=initSearchByUrl
+  $v_blogs = list($BLOGS, "create", ";")
+  $g_blogsLoaded = false
+  IF NOT($chbReloadBlogs)
+    MacSettings type=R vars=v_blogs,g_blogsLoaded fileCheck=N
+  ENDIF
+
+  IF $g_blogsLoaded
+    $v_blogs = list($BLOGS, "replace", $v_blogs)
+  ELSE
+    GOSUB name=loadBlogData
+    $v_blogs = list($BLOGS, "get", "")
+    MacSettings type=S vars=v_blogs,g_blogsLoaded
+  ENDIF
+
+  $v_index = list($BLOGS, "regex", ".*,$p_url")
+  IF $v_index = "0" OR $v_index = ""
+    RETURN msg="URL '$p_url' neodpovídají žádné keše."
+  ENDIF
+
+  $v_item = list($BLOGS, "item", $v_index)
+  $v_from = regexsub($BLOG_FORMAT, $v_item, 1, 1)
+  $v_to   = regexsub($BLOG_FORMAT, $v_item, 1, 2)
+
+  $minDate = stringToDate($v_from)
+  $maxDate = stringToDate($v_to)
+
+  # úklid
+  $v_blogs = list($BLOGS, "destroy", "")
+  $v_x = removeVar("v_blogs")
+  $v_x = removeVar("v_index")
+  $v_x = removeVar("v_item")
+  $v_x = removeVar("v_from")
+  $v_x = removeVar("v_to")
+ENDSUB
+
+BEGINSUB name=loadBlogData
+  TABLE active=LOGS scope=ALL
+  GOTO position=TOP
+  WHILE NOT($_EOL)
+    IF $d_lIsOwner
+      $p_text = $d_lText
+      GOSUB name=getBlogUrl
+      $v_url = $r_url
+
+      IF $v_url <> ""
+        $v_index = list($BLOGS, "regex", ".*,$v_url")
+        IF $v_index = "0" OR $v_index = ""
+          $v_from = dateToString($d_lDate)
+          $v_to = dateToString($d_lDate)
+          $v_item = "$v_from,$v_to,$v_url"
+          $v_blogs = list($BLOGS, "add", $v_item)
+        ELSE
+          $v_item = list($BLOGS, "item", $v_index)
+          $v_from = regexsub($BLOG_FORMAT, $v_item, 1, 1)
+          $v_to   = regexsub($BLOG_FORMAT, $v_item, 1, 2)
+
+          IF stringToDate($v_from) > $d_lDate
+            $v_from = dateToString($d_lDate)
+          ENDIF
+          IF stringToDate($v_to) < $d_lDate
+            $v_to = dateToString($d_lDate)
+          ENDIF
+          $v_item = "$v_from,$v_to,$v_url"
+          $v_blogs = list($BLOGS, "edit:$v_index", $v_item)
+        ENDIF
+      ENDIF
+    ENDIF
+    GOTO position=NEXT
+  ENDWHILE
+  $g_blogsLoaded = true
+
+  TABLE active=CACHES
+ENDSUB
+
+BEGINSUB name=getBlogUrl
+  $r_url = regexsub("\[url=http://kacer-bob.blogspot.com/\d+/\d+/([^.]+).html\]", $p_text, 1, 1)
+ENDSUB
+
+# BEGINSUB name=initStat
+#   array($STAT, 0) = "256"
+#   array($STAT, -1) = "0"
+#   $date = [00000000]
+# ENDSUB
+# 
+# BEGINSUB name=onDNF_BEGIN
+#   IF $d_DNF
+#     $r_item = "$r_item<i><font color='#808080'>"
+#   ENDIF
+# ENDSUB
+# 
+# BEGINSUB name=onDNF_END
+#   IF $d_DNF
+#     $r_item = "$r_item</font></i>"
+#   ENDIF
+# ENDSUB
+# 
+# BEGINSUB name=countStat
+#   BEGINCASE
+#     CASE $d_found
+#       array($STAT, 1) = numToStr(val(array($STAT, 1)) + 1)
+#       array($STAT, asc($d_cacheType)) = numToStr(val(array($STAT, asc($d_cacheType))) + 1)
+#       IF $d_foundByMeDate > $date
+#         $date = $d_foundByMeDate
+#       ENDIF
+#     CASE $d_dnf
+#       array($STAT, 2) = numToStr(val(array($STAT, 2)) + 1)
+#       IF $d_dnfDate > $date
+#         $date = $d_dnfDate
+#       ENDIF
+#   ENDCASE
+# ENDSUB
+# 
+# BEGINSUB name=getMyFoundItLog
+#   TABLE Active=Logs Scope=Parent
+# 
+#   $myFoundItLog=0
+#   WHILE NOT($_EOL)
+#     IF $d_lIsOwner AND $d_lType = "Found it"
+#       $myFoundItLog = $d_lLogid
+#     ENDIF
+#     GOTO position=NEXT
+#   ENDWHILE
+# 
+#   TABLE Active=Caches
+# ENDSUB
+# 
+# BEGINSUB name=getMyLogs
+#    $result=""
+#    GOTO position=TOP
+#    WHILE NOT($_EOL)
+#       IF $_FilterActive OR $d_UserFlag
+#          GOSUB name=getMyLogRecord
+#          $result = "$result$NL$getMyLogRecord_result"
+#       ENDIF
+#       GOTO position=NEXT
+#    ENDWHILE
+# ENDSUB
+# 
+# # getMyLogRecord
+# # ==============
+# # Naète mé logy k aktuálnì vybranému záznamu.
+# #
+# # @return $getMyLogRecord_result
+# #
+# BEGINSUB name=getMyLogRecord
+#   TABLE Active=Logs Scope=Parent
+#   $getMyLogRecord_result = ""
+# 
+#   GOTO position=TOP
+#   WHILE NOT($_EOL)
+#     IF $d_lIsOwner AND $d_lDate >= $minDate AND $d_lDate <= $maxDate
+#       IF $OddLogRecord
+#         $getMyLogRecord_result = "$getMyLogRecord_result<div style='background: $LightBackground; outline: 5pt solid $LightBackground;'>"
+#       ELSE
+#         $getMyLogRecord_result = "$getMyLogRecord_result<div>"
+#       ENDIF
+#       $OddLogRecord = NOT($OddLogRecord)
+# 
+#       $par1 = $d_lType
+#       GOSUB name=logIcon
+# 
+#       $getMyLogRecord_result = "$getMyLogRecord_result<p><img src='$logIcon' alt=" + QUOTE("[$d_lType]") + " style='border: 0px; vertical-align: middle;'/><b>"
+#       IF $minDate <> $maxDate
+#         #$result = $result + str(val(subStr(dateToString($d_lDate), 7, 2))) + "." + str(val(subStr(dateToString($d_lDate), 5, 2))) + ". "
+#         $getMyLogRecord_result = "$getMyLogRecord_result " + dateFormat($d_lDate)
+#       ENDIF
+#       $getMyLogRecord_result = "$getMyLogRecord_result $d_Code - $d_Name</b> ($d_OwnerName, placed $d_PlacedDate"
+#       IF $d_OwnerName <> $d_PlacedBy
+#         $getMyLogRecord_result = "$getMyLogRecord_result by $d_PlacedBy"
+#       ENDIF
+#       $getMyLogRecord_result = "$getMyLogRecord_result)</p>$NL"
+#       
+#       $par1=$d_lText
+#       GOSUB name=bbcodeToHtml
+#       $getMyLogRecord_result = "$getMyLogRecord_result<p>$bbcodeToHtml_result</p>$NL</div>$NL"
+# 
+#     ENDIF
+#     GOTO position=NEXT
+#   ENDWHILE
+# 
+#   TABLE Active=Caches
+# ENDSUB
+# 
+# BEGINSUB name=logIcon
+#   BEGINCASE
+#     CASE $par1 = "Didn't find it"
+#       $logIcon = "http://www.xlii.cz/img/gc/Not Found.png"
+#     OTHERWISE
+#       $logIcon = "http://www.xlii.cz/img/gc/$par1.png"
+#   ENDCASE
+# ENDSUB
+# 
+# BEGINSUB name=bbcodeToHtml
+#   $bbcodeToHtml_result = $par1
+# 
+#   #Odstranìní nechtìného textu
+#   #
+#   $bbcodeToHtml_result = RegExReplace("\n*This entry was edited by [^.]+\.", $bbcodeToHtml_result, "")
+#   $bbcodeToHtml_result = RegExReplace("\[url\s*=\s*http://kacer-bob\..*more\.\.\..*\[/url\]", $bbcodeToHtml_result, "")
+# 
+#   # Smajlíky
+#   #
+#   $bbcodeToHtml_result = Replace("[:)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile.gif' alt=':)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[:D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_big.gif' alt=':D' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[8D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_cool.gif' alt='8D' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[:I]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blush.gif' alt=':I' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[:P]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_tongue.gif' alt=':P' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[}:)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_evil.gif' alt='}:)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[;)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_wink.gif' alt=';)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[:o)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_clown.gif' alt=':o' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[B)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blackeye.gif' alt='B)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[8]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_8ball.gif' alt='8' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[:(]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sad.gif' alt=':(' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[8)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shy.gif' alt='8)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[:O]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shock.gif' alt=':O' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[:(!]", "<img src='http://www.xlii.cz/img/gc/icon_smile_angry.gif' alt=':(!' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[xx(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[|)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sleepy.gif' alt='|)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[:X]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_kisses.gif' alt=':X' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[^]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_approve.gif' alt='^' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[V]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_dissapprove.gif' alt='v' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+#   $bbcodeToHtml_result = Replace("[?]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_question.gif' alt='?' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
+# 
+#   # HTML - styly
+#   $bbcodeToHtml_result = Replace("[b]",  "<b>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/b]", "</b>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[i]",  "<i>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/i]", "</i>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[u]",  "<u>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/u]", "</u>", $bbcodeToHtml_result)
+# 
+#   $bbcodeToHtml_result = Replace("[highlight]",  "<i>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/highlight]", "</i>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[code]",  "<pre>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/code]", "</pre>", $bbcodeToHtml_result)
+# 
+#   $bbcodeToHtml_result = Replace("[p]",  "<p>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/p]", "</p>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[br]",  "<br/>",  $bbcodeToHtml_result)
+# 
+#   # HTML - barva textu
+#   $bbcodeToHtml_result = Replace("[black]",  "<font color='black'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/black]", "</font>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[blue]",  "<font color='blue'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/blue]", "</font>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[red]",  "<font color='red'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/red]", "</font>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[purple]",  "<font color='purple'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/purple]", "</font>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[pink]",  "<font color='pink'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/pink]", "</font>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[orange]",  "<font color='orange'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/orange]", "</font>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[yellow]",  "<font color='yellow'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/yellow]", "</font>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[green]",  "<font color='green'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/green]", "</font>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[white]",  "<font color='white'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/white]", "</font>", $bbcodeToHtml_result)
+# 
+#   # HTML - zarovnání textu
+#   $bbcodeToHtml_result = Replace("[left]",  "<div align='left'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/left]", "</div>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[center]",  "<div align='center'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/center]", "</div>", $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[right]",  "<div align='right'>",  $bbcodeToHtml_result)
+#   $bbcodeToHtml_result = Replace("[/right]", "</div>", $bbcodeToHtml_result)
+# 
+#   # HTML - velikost textu
+#   $bbcodeToHtml_result = RegExReplace("\[size\s*=\s*", $bbcodeToHtml_result, "<font size=") 
+#   $bbcodeToHtml_result = Replace("[/size]", "</font>", $bbcodeToHtml_result) 
+# 
+#   # HTML - odkazy
+#   $bbcodeToHtml_result = RegExReplace("\[url\s*=\s*", $bbcodeToHtml_result, "<a href=") 
+#   $bbcodeToHtml_result = Replace("[/url]", "</a>", $bbcodeToHtml_result) 
+# 
+#   $bbcodeToHtml_result = Replace("]", ">", $bbcodeToHtml_result) 
+# 
+#   # Konce øádkù
+#   $bbcodeToHtml_result = RegExReplace("<p>(\r*\n)+", $bbcodeToHtml_result, "<p>$NL") 
+#   $bbcodeToHtml_result = RegExReplace("(\r*\n)+</p>", $bbcodeToHtml_result, "</p>") 
+#   $bbcodeToHtml_result = RegExReplace("(\r*\n)+", $bbcodeToHtml_result, "<br/>$NL") 
+# ENDSUB
+
+BEGINSUB name=VstupniFormular
+  $rbtAll = true
+  $rbtLogDate = false
+  $rbtLogUrl = false
+  $chbHeading = true
+  $chbTable = true
+  $chbLogs = true
+  MacSettings type=R vars=rbtAll,rbtLogDate,rbtLogUrl,chbHeading,chbTable,chbLogs,datFrom,datUpto,txtLogUrl file=BR_HtmlLogBase2_form.xml fileCheck=N
+
+  $VstupniFormular = editForm($VstupniFormular, "frmVstupniFormular", "delay", "7")
+  WHILE true
+    #IF $rbtLogDate
+    #  $VstupniFormular = editForm($VstupniFormular, "datFrom", "Enabled", "Yes")
+    #  $VstupniFormular = editForm($VstupniFormular, "datUpto", "Enabled", "Yes")
+    #ELSE
+    #  $VstupniFormular = editForm($VstupniFormular, "datFrom", "Enabled", "No")
+    #  $VstupniFormular = editForm($VstupniFormular, "datUpto", "Enabled", "No")
+    #ENDIF
+
+    $exit = form($VstupniFormular, "")
+    $VstupniFormular = editForm($VstupniFormular, "frmVstupniFormular", "delay", "")
+    BEGINCASE
+    CASE $exit = "btnPickBlog"
+      GOSUB name=pickBlogName
+    CASE $exit = "btnOk" OR $exit = "DelayExit"
+      BREAK
+    CASE $exit = "btnCancel" OR $exit = "SystemExit"
+      RETURN
+
+    CASE $exit = "datFrom"
+      $datUpto = $datFrom
+    ENDCASE
+  ENDWHILE
+
+  MacSettings type=S vars=rbtAll,rbtLogDate,rbtLogUrl,chbHeading,chbTable,chbLogs,datFrom,datUpto,txtLogUrl file=BR_HtmlLogBase2_form.xml 
+ENDSUB
+
+<Data> VarName=$VstupniFormular
+#********************************************************************
+# Form generated by GSAK form designer on so 19-III-2011 10:14:38
+#********************************************************************
+
+Name = frmVstupniFormular
+  Type = Form
+  Caption = Tabulky do blogu
+  Height = 215
+  Width = 350
+  Delay = 7
+
+Name = Groupbox1
+  Type = Groupbox
+  Caption = Co všechno generovat
+  Height = 97
+  Left = 192
+  Top = 8
+  Width = 137
+  Taborder = 12
+
+Name = rbtAll
+  Type = Radiobutton
+  Height = 17
+  Left = 8
+  Top = 8
+  Width = 113
+  Taborder = 8
+  ExitOnChange = Yes
+  Caption = Všechny ve výbìru
+
+Name = rbtLogDate
+  Type = Radiobutton
+  Height = 17
+  Left = 8
+  Top = 32
+  Width = 113
+  Taborder = 9
+  ExitOnChange = Yes
+  Caption = Podle data logu
+
+Name = Label1
+  Type = Label
+  Height = 13
+  Left = 24
+  Top = 56
+  Width = 12
+  Caption = od
+
+Name = datFrom
+  Type = Date
+  Height = 21
+  Left = 48
+  Top = 51
+  Width = 121
+  Taborder = 10
+#  ExitOnChange = Yes
+
+Name = Label2
+  Type = Label
+  Height = 13
+  Left = 24
+  Top = 80
+  Width = 12
+  Caption = do
+
+Name = datUpto
+  Type = Date
+  Height = 21
+  Left = 48
+  Top = 75
+  Width = 121
+  Taborder = 11
+
+Name = rbtLogUrl
+  Type = Radiobutton
+  Height = 17
+  Left = 8
+  Top = 104
+  Width = 113
+  Taborder = 12
+  ExitOnChange = Yes
+  Caption = Podle URL v logu
+
+Name = LabelLogUrl
+  Type = Label
+  Height = 13
+  Left = 24
+  Top = 128
+  Width = 12
+  Caption = URL
+
+Name = txtLogUrl
+  Type = Edit
+  Height = 17
+  Left = 48
+  Top = 123
+  Width = 265
+  Taborder = 13
+
+Name = btnPickBlog
+  Type = Button
+  Escape = Yes
+  Height = 25
+  Left = 317
+  Top = 121
+  Width = 16
+  Taborder = 14
+  Caption = ...
+
+Name = chbReloadBlogs
+  Type = Checkbox
+  Height = 17
+  Left = 24
+  Top = 147
+  Width = 150
+  Taborder = 15
+  Caption = obnovit data blogù
+
+Name = chbHeading
+  Type = Checkbox
+  Height = 17
+  Left = 200
+  Top = 32
+  Width = 97
+  Taborder = 16
+  Caption = záhlaví (souhrn)
+
+Name = chbTable
+  Type = Checkbox
+  Height = 17
+  Left = 200
+  Top = 56
+  Width = 110
+  Taborder = 17
+  Caption = podrobnou tabulku
+
+Name = chbLogs
+  Type = Checkbox
+  Height = 17
+  Left = 200
+  Top = 80
+  Width = 97
+  Taborder = 18
+  Caption = logy
+
+Name = btnOk
+  Type = Button
+  Enter = Yes
+  Height = 25
+  Left = 168
+  Top = 157
+  Width = 75
+  Taborder = 19
+  Caption = Ok
+
+Name = btnCancel
+  Type = Button
+  Escape = Yes
+  Height = 25
+  Left = 256
+  Top = 157
+  Width = 75
+  Taborder = 20
+  Caption = Storno
+
+<enddata>
+
+BEGINSUB name=pickBlogName
+  GOSUB name=fillList
+  WHILE true
+    $exit = form($SeznamBlogu, "")
+    BEGINCASE
+    CASE $exit = "btnOk"
+      $txtLogUrl = regexReplace(" .*$", $lstBlogs, "")
+      BREAK
+    CASE $exit = "btnCancel"
+      EXITSUB
+    CASE $exit = "btnReload"
+      $g_blogsLoaded = false
+      GOSUB name=initSearchByUrl
+      GOSUB name=fillList
+    ENDCASE
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=fillList
+  $v_blogs = list($BLOGS, "create", ";")
+  MacSettings type=R vars=v_blogs,g_blogsLoaded fileCheck=N
+  $v_blogs = list($BLOGS, "replace", $v_blogs)
+  $v_blogs = list($BLOGS, "sort", "")
+  $v_blogs = list($BLOGS, "replace", $v_blogs)
+
+  $v_pocet = val(list($BLOGS, "count", ""))
+  $v_pozice = $v_pocet
+  $v_values = ""
+  $v_items = list("V_ITEMS", "create", ",")
+  WHILE $v_pozice > 0
+    $v_item = list($BLOGS, "item", numToStr($v_pozice))
+    $v_items = list("V_ITEMS", "replace", $v_item)
+    $v_blog = list("V_ITEMS", "item", "3")
+    $v_from = stringToDate(list("V_ITEMS", "item", "1"))
+    $v_to = stringToDate(list("V_ITEMS", "item", "2"))
+
+    IF $v_from = $v_to
+      $v_values = "$v_values;$v_blog ($v_from)"
+    ELSE
+      $v_values = "$v_values;$v_blog ($v_from - $v_to)"
+    ENDIF
+
+    $v_pozice = $v_pozice - 1
+  ENDWHILE
+  $v_values = substr($v_values, 2, 0)
+  
+  $SeznamBlogu = editForm($SeznamBlogu, "lstBlogs", "values", $v_values)
+
+  $v_blogs = list($BLOGS, "destroy", "")
+  $v_items = list("V_ITEMS", "destroy", "")
+  $v_x = removeVar("v_blogs")
+  $v_x = removeVar("v_pozice")
+  $v_x = removeVar("v_pocet")
+  $v_x = removeVar("v_values")
+  $v_x = removeVar("v_item")
+  $v_x = removeVar("v_items")
+  $v_x = removeVar("v_blog")
+  $v_x = removeVar("v_from")
+  $v_x = removeVar("v_to")
+ENDSUB
+
+<Data> VarName=$SeznamBlogu
+#********************************************************************
+# Form generated by GSAK form designer on ne 27-XI-2011 22:33:31
+#********************************************************************
+
+Name = frmSeznamBlogu
+  Type = Form
+  Height = 715
+  Top = 224
+  Width = 474
+
+Name = lstBlogs
+  Type = Checklistbox
+  Height = 665
+  Left = 8
+  Top = 8
+  Width = 361
+  Taborder = 10
+
+Name = btnOk
+  Type = Button
+  Height = 25
+  Left = 376
+  Top = 8
+  Width = 75
+  Taborder = 11
+  Caption = Ok
+
+Name = btnCancel
+  Type = Button
+  Escape = Yes
+  Height = 25
+  Left = 376
+  Top = 40
+  Width = 75
+  Taborder = 12
+  Caption = Storno
+
+Name = btnReload
+  Type = Button
+  Height = 25
+  Left = 376
+  Top = 96
+  Width = 75
+  Taborder = 13
+  Caption = Reload
+
+<enddata>
+#

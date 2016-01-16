@@ -1,0 +1,12 @@
+#*******************************************
+# MacVersion = 1.00
+# MacDescription = Vybere keše které byly dnes aktualizovány (lastGpx = TODAY)
+# MacAuthor = Bohusz
+# MacFileName = BR_DnesAktualizovane.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_DnesAktualizovane.gsk
+#*******************************************
+# 1.00 (15.11.2015):
+#    - Vytvoøeno
+#*******************************************
+
+MFILTER where="lastGpxDate = date('now', 'localtime')"

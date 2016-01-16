@@ -1,0 +1,15 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = BR_SmartNameToUserData
+# MacAuthor = Bob
+# MacFileName = BR_SmartNameToUserData.gsk
+# MacUrl =  http://www.xlii.cz/downloads/gsak/macros/BR_SmartNameToUserData.gsk
+#*******************************************
+
+# zpracování
+WHILE NOT($_EOL)
+  IF NOT($d_Found)
+    $d_UserData = $d_SmartName
+  ENDIF
+  GOTO position=NEXT
+ENDWHILE

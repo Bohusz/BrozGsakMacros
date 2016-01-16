@@ -1,0 +1,19 @@
+#*******************************************
+# MacVersion = 1.1
+# MacDescription = Field Notes Import Correction - moves timestemp from Usport to UserData
+# MacAuthor = Bob
+# MacFileName = BR_FieldNotesImportCorrector.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_FieldNotesImportCorrector.gsk
+#*******************************************
+
+DECLARE var=$NULL type=NUMERIC
+GOTO position=TOP
+
+# zpracování
+WHILE NOT($_EOL)
+  IF IsEmpty($d_UserData) AND $d_UserSort > 9999
+    $d_UserData = SubStr(Right(NumToStr($d_UserSort), 4), 1, 2) + ":" + Right(NumToStr($d_UserSort), 2)
+    $d_UserSort = $NULL
+  ENDIF
+  GOTO position=NEXT
+ENDWHILE
