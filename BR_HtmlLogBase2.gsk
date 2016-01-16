@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 2.04
+# MacVersion = 2.07
 # MacDescription = Tabulka keší + my logs do blogger.com
 # MacAuthor = Bohusz
 # MacFileName = BR_HtmlLogBase2.gsk
@@ -21,25 +21,51 @@
 # 2.03 (19.5.2013)
 #    - Za oddìlovaè záhlaví doplnìn prázdný øádek.
 # 2.04 (29.10.2013)
-#    - Podpora poro týmový odlov - èas ve tvaru HH:MM/HH:MM, kde první
+#    - Podpora pro týmový odlov - èas ve tvaru HH:MM/HH:MM, kde první
 #      je èas spojení týmu a druhé èas odlovu jinou èástí týmu
+# 2.05 (6.1.2014)
+#    - podpora odrážek
+#    - oprava - zapoètení Attended do nálezù
+# 2.06 (1.11.2015)
+#    - Odstraòování GCVote poznámek.
+# 2.07 (9.1.2016)
+#    - Vyhledávání názvù blogù pomocí SQLGET (rychlejší).
+#    - Podpora pro blogy shodných názvù.
+#    - Pokud log neobsahuje èas (ne)nálezu, je doplnìn z GSAK.
+#    - Oprava: Doplnìní podpory pro chybìjící barvy.
+#    - Oprava: URL blogu nyní rozpoznáno i v TLD .cz, nejen .com (je to ekvivalentní).
 #*******************************************
 
 # inicializace
+VSUB status=on
 $STAT = 1
 $ITEMS = 2
 $WORK = 3
 $BLOGS = "BLOGS"
-#                date          time          logtype cacheid logid
-#                  1             2              3       4      5
-$ITEM_FORMAT ="^([-.0-9]+) +(~?\d?\d:\d\d(/\d?\d:\d\d)?)?,([^,]+),([^,]+),([^,]*)$"
-#                date1        date2   text
-#                  1            2       3
-$BLOG_FORMAT ="^([-.0-9]+),([-.0-9]+),(.*)$"
-
+#
+$LOGREC_RE        = "^([-.0-9]+) +(~?\d?\d:\d\d(/\d?\d:\d\d)?)?,([^,]+),([^,]+),([^,]*)$"
+$LOGREC_DATE_GRP  = 1
+$LOGREC_TIME_GRP  = 2
+$LOGREC_TYPE_GRP  = 4
+$LOGREC_CACHE_GRP = 5
+$LOGREC_LOGID_GRP = 6
+#
+$BLOGITEM_RE        = "^([-.0-9]+),([-.0-9]+),([^,]+)(,(\d+),(\d+))?$"
+$BLOGITEM_DATE1_GRP = 1
+$BLOGITEM_DATE2_GRP = 2
+$BLOGITEM_NAME_GRP  = 3
+$BLOGITEM_YEAR_GRP  = 5
+$BLOGITEM_MONTH_GRP = 6
+#
+$URL_RE        = "\[url=http://kacer-bob.blogspot.(com|cz)/(\d+)/(\d+)/([^.]+).html\]"
+$URL_YEAR_GRP  = 2
+$URL_MONTH_GRP = 3
+$URL_NAME_GRP  = 4
+#
 $NL = $_NewLine
 $LightBackground = "#d8e8c8"
 $OddLogRecord = TRUE
+$VERBOSE = FALSE
 # GOSUB name=initStat
 
 GOSUB name=VstupniFormular
@@ -54,6 +80,10 @@ ENDIF
 IF $rbtLogUrl
   $p_url = $txtLogUrl
   GOSUB name=initSearchByUrl
+ELSE
+  $blogName  = ""
+  $blogYear  = ""
+  $blogMonth = ""
 ENDIF
 
 $savedFilter = saveFilter()
@@ -67,7 +97,9 @@ $html = ""
 
 IF $chbHeading
   GOSUB name=processStats
-  $html = "$html$NL$r_stats"
+  $p_sectionName    = "STATISTICS"
+  $p_sectionContent = $r_stats
+  GOSUB name=appendSection
 ENDIF
 
 IF $chbHeading AND $chbTable
@@ -76,110 +108,17 @@ ENDIF
 
 IF $chbTable
   GOSUB name=processTable
-  $html = "$html$NL$r_table"
+  $p_sectionName    = "LOG OVERVIEW"
+  $p_sectionContent = $r_table
+  GOSUB name=appendSection
 ENDIF
 
 IF $chbLogs
   GOSUB name=processLogs
-  $html = "$html$NL$r_logs"
+  $p_sectionName    = "LOGS"
+  $p_sectionContent = $r_logs
+  GOSUB name=appendSection
 ENDIF
-
-# $html = "<table border='1' style='width: 100%; border-collapse: collapse;'>$NL"
-# IF $minDate <> $maxDate
-#   $html = "$html<col width='40'/>"
-# ENDIF
-# $html = "$html<col width='20'/><col width='10'/><col width='40'/>$NL"
-# $myFoundItLog=0
-# 
-# # zpracování
-# GOTO position=TOP
-# $prevDate = [00000000]
-# WHILE NOT($_EOL)
-#   IF $_FilterActive OR $d_UserFlag
-#     GOSUB name=getMyFoundItLog
-# 
-#     $html = "$html<tr>"
-# 
-#     # datum
-#     IF $minDate <> $maxDate
-#       GOSUB name=onDNF_BEGIN
-#       IF $d_FoundByMeDate <> [00000000]
-#         IF $d_FoundByMeDate = $prevDate
-#             $html = "$html<td align='center'>&quot;</td>"
-#         ELSE
-#           $html = "$html<td align='right'>$d_FoundByMeDate</td>"
-#         ENDIF
-#         $prevDate = $d_FoundByMeDate
-#       ELSE
-#         IF $d_DNF
-#           IF $d_DNFDate = $prevDate
-#             $html = "$html<td align='center'>&quot;</td>"
-#           ELSE
-#             $html = "$html<td align='right'>$d_DNFDate</td>"
-#           ENDIF
-#           $prevDate = $d_DNFDate
-#         ENDIF
-#       ENDIF
-#       GOSUB name=onDNF_END
-#     ENDIF
-# 
-#     # èas + odkaz na log
-#     $html = "$html<td align='right'>"
-#     GOSUB name=onDNF_BEGIN
-#     IF $myFoundItLog <> 0
-#       $html = "$html<a href='http://www.geocaching.com/seek/log.aspx?LID=$myFoundItLog'>$d_UserData</a>"
-#     ELSE
-#       $html = "$html$d_UserData"
-#     ENDIF
-#     GOSUB name=onDNF_END
-#     $html = "$html</td>"
-# 
-#     # ikony keše
-#     $html = "$html<td>"
-#     GOSUB name=onDNF_BEGIN
-#     $html = "$html<img src='http://www.xlii.cz/img/gc/$d_CacheType.gif' alt='$d_CacheType' style='border: 0px; vertical-align: middle;'/>"
-#     GOSUB name=onDNF_END
-#     $html = "$html</td>"
-# 
-#     # GC kód + odkaz na listing
-#     $html = "$html<td>"
-#     GOSUB name=onDNF_BEGIN
-#     IF isEmpty($d_url)
-#       $html = "$html$d_Code"
-#     ELSE
-#       $html = "$html<a href='$d_url'>$d_Code</a>"
-#     ENDIF
-#     GOSUB name=onDNF_END
-#     $html = "$html</td>"
-# 
-#     # název keše (autor)
-#     $html = "$html<td>"
-#     GOSUB name=onDNF_BEGIN
-#     $html = "$html<b>$d_Name</b> ($d_PlacedBy)"
-#     GOSUB name=onDNF_END
-#     $html = "$html</td>"
-# 
-#     $html = "$html</tr>$NL"
-#     GOSUB name=countStat
-#   ENDIF
-#   GOTO position=NEXT
-# ENDWHILE
-# 
-# dokonèení
-# $html = "$html</table>$NL"
-# IF NOT($chbTable)
-#   $html = ""
-# ENDIF
-# 
-# IF $chbHeading
-#   GOSUB name=htmlStat
-#   $html = "$result$NL<!-- more -->$NL$html"
-# ENDIF
-# 
-# IF $chbLogs
-#   GOSUB name=getMyLogs
-#   $html = "$html$result"
-# ENDIF
 
 # úklid
 $x = restoreFilter($savedFilter, true) = 0
@@ -205,12 +144,24 @@ BEGINSUB name=lookupData
       IF $d_lIsOwner
         $p_text = $d_lText
         GOSUB name=getBlogUrl
-        $v_url = $r_url
+        $v_blogName  = $r_url
+        $v_blogYear  = $r_year
+        $v_blogMonth = $r_month
 
-        IF $rbtLogUrl AND $v_url <> $txtLogUrl
-          $v_processed = TRUE
-        ELSE
+        IF $blogName <> ""
+          IF $blogYear <> "" AND $blogYear <> ""
+            $v_processed = $v_blogName <> $blogName OR $v_blogYear <> $blogYear OR $v_blogMonth <> $blogMonth
+          ELSE
+            $v_processed = $v_blogName <> $blogName
+          ENDIF
+        ENDIF
+
+        IF NOT($v_processed)
           $v_time = regexsub("(\d{1,2}:\d{2})", $d_lText, 1, 1)
+          IF $v_time = ""
+            # Nìkdy je keš v GSAK oznaèena jako DNF, ale není k ní buï žádný log nebo je jiného typu (typicky 'Needs maintenance') a bez èasu 'nenálezu'.
+            $v_time = $d_UserData
+          ENDIF
           IF len($v_time) = 4
             $v_time = "0$v_time"
           ENDIF
@@ -281,9 +232,9 @@ BEGINSUB name=calculateStats
   WHILE $v_index <= $g_maxItems
     $v_item = array($ITEMS, $v_index)
     SHOWSTATUS msg="[STATS] #$v_index: $v_item"
-    $v_date = stringToDate(regexsub($ITEM_FORMAT, $v_item, 1, 1))
-    $v_lgTyp = regexsub($ITEM_FORMAT, $v_item, 1, 4)
-    $v_cache = regexsub($ITEM_FORMAT, $v_item, 1, 5)
+    $v_date  = stringToDate(regexsub($LOGREC_RE, $v_item, 1, $LOGREC_DATE_GRP))
+    $v_lgTyp = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_TYPE_GRP)
+    $v_cache = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_CACHE_GRP)
     SHOWSTATUS msg="[STATS] #$v_index: $v_cache, $v_lgTyp"
 
     IF NOT(seek($v_cache))
@@ -292,7 +243,7 @@ BEGINSUB name=calculateStats
       RETURN
     ENDIF
     BEGINCASE
-      CASE $v_lgTyp = "FOUND"
+      CASE $v_lgTyp = "FOUND" OR $v_lgTyp = "ATTENDED" OR $v_lgTyp = "PHOTO TAKEN"
         array($STAT, 1) = numToStr(val(array($STAT, 1)) + 1)
         array($STAT, asc($d_cacheType)) = numToStr(val(array($STAT, asc($d_cacheType))) + 1)
       CASE $v_lgTyp = "DNF"
@@ -315,6 +266,7 @@ ENDSUB
 
 BEGINSUB name=htmlStats
   IF array($STAT, 1) = "0" AND array($STAT, 2) = "0"
+    $result = ""
     EXITSUB
   ENDIF
 
@@ -382,12 +334,12 @@ BEGINSUB name=processTable
   $v_prevDate = [00000000]
   $v_index = 1
   WHILE $v_index <= $g_maxItems
-    $v_item = array($ITEMS, $v_index)
-    $v_date = stringToDate(regexsub($ITEM_FORMAT, $v_item, 1, 1))
-    $v_time = regexsub($ITEM_FORMAT, $v_item, 1, 2)
-    $v_lgTyp = regexsub($ITEM_FORMAT, $v_item, 1, 4)
-    $v_cache = regexsub($ITEM_FORMAT, $v_item, 1, 5)
-    $v_logid = regexsub($ITEM_FORMAT, $v_item, 1, 6)
+    $v_item  = array($ITEMS, $v_index)
+    $v_date  = stringToDate(regexsub($LOGREC_RE, $v_item, 1, $LOGREC_DATE_GRP))
+    $v_time  = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_TIME_GRP)
+    $v_lgTyp = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_TYPE_GRP)
+    $v_cache = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_CACHE_GRP)
+    $v_logid = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_LOGID_GRP)
     SHOWSTATUS msg="[TABLE] #$v_index: $v_cache, $v_date $v_time, $v_lgTyp, $logid"
 
     $p_date = $v_date
@@ -491,12 +443,12 @@ BEGINSUB name=processLogs
   $v_index = 1
 
   WHILE $v_index <= $g_maxItems
-    $v_item = array($ITEMS, $v_index)
-    $v_date = stringToDate(regexsub($ITEM_FORMAT, $v_item, 1, 1))
-    $v_time = regexsub($ITEM_FORMAT, $v_item, 1, 2)
-    $v_lgTyp = regexsub($ITEM_FORMAT, $v_item, 1, 4)
-    $v_cache = regexsub($ITEM_FORMAT, $v_item, 1, 5)
-    $v_logid = regexsub($ITEM_FORMAT, $v_item, 1, 6)
+    $v_item  = array($ITEMS, $v_index)
+    $v_date  = stringToDate(regexsub($LOGREC_RE, $v_item, 1, $LOGREC_DATE_GRP))
+    $v_time  = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_TIME_GRP)
+    $v_lgTyp = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_TYPE_GRP)
+    $v_cache = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_CACHE_GRP)
+    $v_logid = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_LOGID_GRP)
     SHOWSTATUS msg="[LOGS] #$v_index: $v_cache, $v_date $v_time, $v_lgTyp, $logid"
 
     # log nemusí vždy existovat - možná ještì nebyl naèten, pak generujeme jen z atributù záznamu keše v databázi
@@ -571,6 +523,19 @@ ENDSUB
 ##                                                                                             P O M Ù C K Y    ##
 ##################################################################################################################
 
+# appendSection: Doplní HTML sekci na konec promìnné $html.
+#
+# @param $p_sectionName		Název sekce, který bude použit k ohraníèení vkládaných dat.
+# @param $p_sectionContent	Vkládaná HTML data.
+#
+# @global $html		Modifikovaná promìnná.
+#
+BEGINSUB name=appendSection
+  $html = "$html$NL<!-- BEGIN: $p_sectionName -->$NL$p_sectionContent$NL<!-- END:   $p_sectionname -->"
+  $v_x = removevar("p_sectionName")
+  $v_x = removevar("p_sectionContent")
+ENDSUB
+
 BEGINSUB name=normalizeLogType
   BEGINCASE
   CASE $p_type = "Announcement"
@@ -622,7 +587,8 @@ BEGINSUB name=bbcodeToHtml
   #Odstranìní nechtìného textu
   #
   $r_text = RegExReplace("\n*This entry was edited by [^.]+\.", $r_text, "")
-  $r_text = RegExReplace("\[url\s*=\s*http://kacer-bob\..*more\.\.\..*\[/url\]", $r_text, "")
+  $r_text = RegExReplace("\s*\[size\s*=\s*1\]\s*\(dal jsem [\d.]+ \[url\s*=\s*http://www.gcvote.com\]GCVote\[/url\] body\)\[/size\]", $r_text, "")
+  $r_text = RegExReplace("\s*\[url\s*=\s*http://kacer-bob\..*more\.\.\..*\[/url\]", $r_text, "")
 
   # Smajlíky
   #
@@ -665,24 +631,14 @@ BEGINSUB name=bbcodeToHtml
   $r_text = Replace("[br]",  "<br/>",  $r_text)
 
   # HTML - barva textu
-  $r_text = Replace("[black]",  "<font color='black'>",  $r_text)
-  $r_text = Replace("[/black]", "</font>", $r_text)
-  $r_text = Replace("[blue]",  "<font color='blue'>",  $r_text)
-  $r_text = Replace("[/blue]", "</font>", $r_text)
-  $r_text = Replace("[red]",  "<font color='red'>",  $r_text)
-  $r_text = Replace("[/red]", "</font>", $r_text)
-  $r_text = Replace("[purple]",  "<font color='purple'>",  $r_text)
-  $r_text = Replace("[/purple]", "</font>", $r_text)
-  $r_text = Replace("[pink]",  "<font color='pink'>",  $r_text)
-  $r_text = Replace("[/pink]", "</font>", $r_text)
-  $r_text = Replace("[orange]",  "<font color='orange'>",  $r_text)
-  $r_text = Replace("[/orange]", "</font>", $r_text)
-  $r_text = Replace("[yellow]",  "<font color='yellow'>",  $r_text)
-  $r_text = Replace("[/yellow]", "</font>", $r_text)
-  $r_text = Replace("[green]",  "<font color='green'>",  $r_text)
-  $r_text = Replace("[/green]", "</font>", $r_text)
-  $r_text = Replace("[white]",  "<font color='white'>",  $r_text)
-  $r_text = Replace("[/white]", "</font>", $r_text)
+  $r_text = RegExReplace("\[(red|green|blue|black|purple|pink|orange|yellow|white|brown|gold|maroon|navy|teal)\]",  $r_text, "<font color='$1'>",   "$")
+  $r_text = RegExReplace("\[/(red|green|blue|black|purple|pink|orange|yellow|white|brown|gold|maroon|navy|teal)\]", $r_text, "<!-- /$1 --></font>", "$")
+
+  # HTML - odrážky
+  $r_text = Replace("[list]",   "<ul>",  $r_text)
+  $r_text = Replace("[list=1]", "<ul style='list-style-type=decimal;'>", $r_text)
+  $r_text = Replace("[*]",      "<li>",  $r_text)
+  $r_text = Replace("[/list]",  "</ul>", $r_text)
 
   # HTML - zarovnání textu
   $r_text = Replace("[left]",  "<div align='left'>",  $r_text)
@@ -757,29 +713,44 @@ BEGINSUB name=initSearchByUrl
     MacSettings type=R vars=v_blogs,g_blogsLoaded fileCheck=N
   ENDIF
 
-  IF $g_blogsLoaded
-    $v_blogs = list($BLOGS, "replace", $v_blogs)
-  ELSE
+  IF NOT($g_blogsLoaded)
+    IF $VERBOSE
+      PAUSE msg="GOSUB name=loadBlogData"
+    ENDIF
     GOSUB name=loadBlogData
-    $v_blogs = list($BLOGS, "get", "")
+    $v_blogs = list($BLOGS, "sort", "")
     MacSettings type=S vars=v_blogs,g_blogsLoaded
   ENDIF
+  $v_blogs = list($BLOGS, "replace", $v_blogs)
 
-  $v_index = list($BLOGS, "regex", ".*,$p_url")
+  $v_url = regexReplace("^(\d+)/(\d+)/(.*)$", $p_url, "$3,$1,$2", "$")
+  $v_index = list($BLOGS, "regex", "^.*,$v_url")
   IF $v_index = "0" OR $v_index = ""
     RETURN msg="URL '$p_url' neodpovídají žádné keše."
   ENDIF
 
-  $v_item = list($BLOGS, "item", $v_index)
-  $v_from = regexsub($BLOG_FORMAT, $v_item, 1, 1)
-  $v_to   = regexsub($BLOG_FORMAT, $v_item, 1, 2)
+  $v_item  = list($BLOGS, "item", $v_index)
+  $v_from  = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_DATE1_GRP)
+  $v_to    = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_DATE2_GRP)
+  $v_year  = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_YEAR_GRP)
+  $v_month = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_MONTH_GRP)
 
+  IF $v_url = $p_url
+    $blogName  = $p_url
+    $blogYear  = ""
+    $blogMonth = ""
+  ELSE
+    $blogName  = regexSub("^(\d+)/(\d+)/(.*)$", $p_url, 1, 3)
+    $blogYear  = regexSub("^(\d+)/(\d+)/(.*)$", $p_url, 1, 1)
+    $blogMonth = regexSub("^(\d+)/(\d+)/(.*)$", $p_url, 1, 2)
+  ENDIF
   $minDate = stringToDate($v_from)
   $maxDate = stringToDate($v_to)
 
   # úklid
   $v_blogs = list($BLOGS, "destroy", "")
   $v_x = removeVar("v_blogs")
+  $v_x = removeVar("v_url")
   $v_x = removeVar("v_index")
   $v_x = removeVar("v_item")
   $v_x = removeVar("v_from")
@@ -787,46 +758,79 @@ BEGINSUB name=initSearchByUrl
 ENDSUB
 
 BEGINSUB name=loadBlogData
-  TABLE active=LOGS scope=ALL
-  GOTO position=TOP
-  WHILE NOT($_EOL)
-    IF $d_lIsOwner
-      $p_text = $d_lText
+  $v_blogCount0 = VAL(LIST($BLOGS, "count", ""))
+  $v_count = 0
+
+  $r = SQLITE("sql", "SELECT c.code, c.name, m.lText, l.lDate FROM caches c JOIN logs l ON c.code = l.lParent JOIN logMemo m ON l.lParent = m.lParent AND l.lLogId = m.lLogId WHERE (c.found <> 0 OR c.dnf <> 0) AND l.lIsOwner ORDER BY c.code ASC, l.lLogId ASC", "sqlget=0")
+  WHILE NOT($_SQLEOL)
+      $p_text = SQLGET("lText")
       GOSUB name=getBlogUrl
-      $v_url = $r_url
+      $v_url   = $r_url
+      $v_year  = $r_year
+      $v_month = $r_month
 
       IF $v_url <> ""
+        $v_count = $v_count + 1
+        $v_cacheCode = SQLGET("code")
+        $v_cacheName = SQLGET("name")
+        $v_logDate = SQLTODATE(SQLGET("lDate"))
+
+        SHOWSTATUS title="Vyhledání názvù blogù" msg="#$v_count $v_cacheCode: $v_url ($v_logDate)" width=500
+
         $v_index = list($BLOGS, "regex", ".*,$v_url")
         IF $v_index = "0" OR $v_index = ""
-          $v_from = dateToString($d_lDate)
-          $v_to = dateToString($d_lDate)
-          $v_item = "$v_from,$v_to,$v_url"
+          $v_from  = dateToString($v_logDate)
+          $v_to    = dateToString($v_logDate)
+          $v_item  = "$v_from,$v_to,$v_url"
           $v_blogs = list($BLOGS, "add", $v_item)
         ELSE
           $v_item = list($BLOGS, "item", $v_index)
-          $v_from = regexsub($BLOG_FORMAT, $v_item, 1, 1)
-          $v_to   = regexsub($BLOG_FORMAT, $v_item, 1, 2)
+          $v_from = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_DATE1_GRP)
+          $v_to   = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_DATE2_GRP)
 
-          IF stringToDate($v_from) > $d_lDate
-            $v_from = dateToString($d_lDate)
+          IF stringToDate($v_from) > $v_logDate
+            $v_from = dateToString($v_logDate)
           ENDIF
-          IF stringToDate($v_to) < $d_lDate
-            $v_to = dateToString($d_lDate)
+          IF stringToDate($v_to) < $v_logDate
+            $v_to = dateToString($v_logDate)
           ENDIF
-          $v_item = "$v_from,$v_to,$v_url"
+          $v_item = "$v_from,$v_to,$v_url,$v_year,$v_month"
           $v_blogs = list($BLOGS, "edit:$v_index", $v_item)
         ENDIF
       ENDIF
-    ENDIF
-    GOTO position=NEXT
+    SQLNEXT
   ENDWHILE
-  $g_blogsLoaded = true
 
-  TABLE active=CACHES
+  SQLGETCLOSE
+  SHOWSTATUS display=OFF
+
+  $g_blogsLoaded = true
+  $v_blogCount9 = VAL(LIST($BLOGS, "count", ""))
+  $v_newBlogCount = $v_blogCount9 - $v_blogCount0
+#  MSGOK title="Vyhledání názvù blogù" msg="Nalezeno $v_newBlogCount nových blogù (døíve $v_blogCount0, nyní $v_blogCount9)."
+
+  # úklid
+  $v_x = removeVar("v_cacheName")
+  $v_x = removeVar("v_cacheCode")
+  $v_x = removeVar("v_url")
+  $v_x = removeVar("v_year")
+  $v_x = removeVar("v_month")
+  $v_x = removeVar("v_logDate")
+  $v_x = removeVar("v_index")
+  $v_x = removeVar("v_item")
+  $v_x = removeVar("v_from")
+  $v_x = removeVar("v_to")
+  $v_x = removeVar("v_blogCount0")
+  $v_x = removeVar("v_blogCount9")
+  $v_x = removeVar("v_newBlogCount")
+  $v_x = removeVar("v_count")
 ENDSUB
 
 BEGINSUB name=getBlogUrl
-  $r_url = regexsub("\[url=http://kacer-bob.blogspot.com/\d+/\d+/([^.]+).html\]", $p_text, 1, 1)
+#MSGOK msg=" p_text: $p_text$NL URL_RE: $URL_RE$NL URL_NAME_GRP: $URL_NAME_GRP$NL  URL_YEAR_GRP: $URL_YEAR_GRP$NL  URL_MONTH_GRP: $URL_MONTH_GRP$NL"
+  $r_url   = regexsub($URL_RE, $p_text, 1, $URL_NAME_GRP)
+  $r_year  = regexsub($URL_RE, $p_text, 1, $URL_YEAR_GRP)
+  $r_month = regexsub($URL_RE, $p_text, 1, $URL_MONTH_GRP)
 ENDSUB
 
 # BEGINSUB name=initStat
@@ -1039,6 +1043,7 @@ BEGINSUB name=VstupniFormular
   $rbtAll = true
   $rbtLogDate = false
   $rbtLogUrl = false
+  $chbVerbose = $VERBOSE
   $chbHeading = true
   $chbTable = true
   $chbLogs = true
@@ -1056,9 +1061,15 @@ BEGINSUB name=VstupniFormular
 
     $exit = form($VstupniFormular, "")
     $VstupniFormular = editForm($VstupniFormular, "frmVstupniFormular", "delay", "")
+    $VERBOSE = $chbVerbose
+    IF $VERBOSE
+      PAUSE msg=" rbtAll: >$rbtAll<$NL rbtLogDate: >$rbtLogDate<$NL datFrom: >$datFrom<$NL datUpto: >$datUpto<$NL rbtLogUrl: >$rbtLogUrl<$NL txtLogUrl: >$txtLogUrl<$NL btnPickBlog: >$btnPickBlog<$NL chbReloadBlogs: >$chbReloadBlogs<$NL chbVerbose: >$chbVerbose<$NL chbHeading: >$chbHeading<$NL chbTable: >$chbTable<$NL chbLogs: >$chbLogs<$NL btnOk: >$btnOk<$NL btnCancel: >$btnCancel<$NL"
+    ENDIF
+
     BEGINCASE
     CASE $exit = "btnPickBlog"
       GOSUB name=pickBlogName
+      $txtLogUrl = $result
     CASE $exit = "btnOk" OR $exit = "DelayExit"
       BREAK
     CASE $exit = "btnCancel" OR $exit = "SystemExit"
@@ -1191,6 +1202,15 @@ Name = chbReloadBlogs
   Taborder = 15
   Caption = obnovit data blogù
 
+Name = chbVerbose
+  Type = Checkbox
+  Height = 17
+  Left = 8
+  Top = 164
+  Width = 150
+  Taborder = 15
+  Caption = prùbìžná hlášení (verbose)
+
 Name = chbHeading
   Type = Checkbox
   Height = 17
@@ -1246,16 +1266,101 @@ BEGINSUB name=pickBlogName
     $exit = form($SeznamBlogu, "")
     BEGINCASE
     CASE $exit = "btnOk"
-      $txtLogUrl = regexReplace(" .*$", $lstBlogs, "")
-      BREAK
+      $p_item = $lstBlogs
+      GOSUB name=parseSelectedItem
+
+      IF $r_name <> ""
+        $p_name = $r_name
+        $p_from = $r_from
+        $p_to   = $r_to
+        GOSUB name=lookupBlogItem
+
+        $result = $r_name
+        IF $r_year <> "" AND $r_month <> ""
+          $result = "$r_year/$r_month/$result"
+        ENDIF
+
+        BREAK
+      ENDIF
+
     CASE $exit = "btnCancel"
       EXITSUB
+
     CASE $exit = "btnReload"
       $g_blogsLoaded = false
+      $p_url = ".*"
       GOSUB name=initSearchByUrl
       GOSUB name=fillList
     ENDCASE
   ENDWHILE
+ENDSUB
+
+BEGINSUB name=parseSelectedItem
+  IF AT(";", $p_item) > 0
+    MSGOK msg="Vyberte, prosím, jen jednu položku."
+    $r_name = ""
+    EXITSUB
+  ENDIF
+
+  $v_name  = regexsub("^([^ ]+) +\((\d+)\.(\d+)\.(\d+)( *- *(\d+)\.(\d+)\.(\d+))?", $p_item, 1, 1)
+  $v_from1 = regexsub("^([^ ]+) +\((\d+)\.(\d+)\.(\d+)( *- *(\d+)\.(\d+)\.(\d+))?", $p_item, 1, 2)
+  $v_from2 = regexsub("^([^ ]+) +\((\d+)\.(\d+)\.(\d+)( *- *(\d+)\.(\d+)\.(\d+))?", $p_item, 1, 3)
+  $v_from3 = regexsub("^([^ ]+) +\((\d+)\.(\d+)\.(\d+)( *- *(\d+)\.(\d+)\.(\d+))?", $p_item, 1, 4)
+  $v_to1   = regexsub("^([^ ]+) +\((\d+)\.(\d+)\.(\d+)( *- *(\d+)\.(\d+)\.(\d+))?", $p_item, 1, 6)
+  $v_to2   = regexsub("^([^ ]+) +\((\d+)\.(\d+)\.(\d+)( *- *(\d+)\.(\d+)\.(\d+))?", $p_item, 1, 7)
+  $v_to3   = regexsub("^([^ ]+) +\((\d+)\.(\d+)\.(\d+)( *- *(\d+)\.(\d+)\.(\d+))?", $p_item, 1, 8)
+
+  $r_name = $v_name
+  $r_from = stringToDate($v_from3+REPLACE(" ", "0", STR(VAL($v_from2), 2, 0))+REPLACE(" ", "0", STR(VAL($v_from1), 2, 0)))
+  IF $v_to1 = ""
+    $r_to = $r_from
+  ELSE
+    $r_to = stringToDate($v_to3+REPLACE(" ", "0", STR(VAL($v_to2), 2, 0))+REPLACE(" ", "0", STR(VAL($v_to1), 2, 0)))
+  ENDIF
+
+  $v_x = removeVar("v_name")
+  $v_x = removeVar("v_from1")
+  $v_x = removeVar("v_from2")
+  $v_x = removeVar("v_from3")
+  $v_x = removeVar("v_to1")
+  $v_x = removeVar("v_to2")
+  $v_x = removeVar("v_to3")
+ENDSUB
+
+BEGINSUB name=lookupBlogItem
+  $v_vzor = dateToString($p_from)+","+dateToString($p_to)+","+$p_name
+
+  $v_blogs = list($BLOGS, "create", ";")
+  MacSettings type=R vars=v_blogs,g_blogsLoaded fileCheck=N
+  $v_blogs = list($BLOGS, "replace", $v_blogs)
+
+  $v_index = list($BLOGS, "regex", "^$v_vzor(,\d+,\d+)?$")
+  IF $v_index = "0"
+    $r_name  = ""
+    $r_year  = ""
+    $r_month = ""
+  ELSE
+    $v_item  = list($BLOGS, "item", $v_index)
+    $r_name  = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_NAME_GRP)
+    $v_year  = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_YEAR_GRP)
+    $v_month = regexsub($BLOGITEM_RE, $v_item, 1, $BLOGITEM_MONTH_GRP)
+    IF $v_year = ""
+      $r_year  = ""
+      $r_month = ""
+    ELSE
+      $r_year  = $v_year
+      $r_month = $v_month
+    ENDIF
+  ENDIF
+
+  # úklid
+  $v_blogs = list($BLOGS, "destroy", "")
+  $v_x = removeVar("v_blogs")
+  $v_x = removeVar("v_vzor")
+  $v_x = removeVar("v_index")
+  $v_x = removeVar("v_item")
+  $v_x = removeVar("v_year")
+  $v_x = removeVar("v_month")
 ENDSUB
 
 BEGINSUB name=fillList
