@@ -1,33 +1,78 @@
 #*******************************************
-# MacVersion = 1.0
+# MacVersion = 1.2
 # MacDescription = BR_UpdatePublished
 # MacAuthor = roztocil
 # MacFileName = BR_UpdatePublished.gsk
 # MacUrl =
 #*******************************************
+# 2015-12-31, 1.2 - podpora pro datum archivace
+#                 - oprava: datum nálezu pøevádìno na interní formát
+#                 - oprava: WHILE místo IF, který zbyl z doby, kdy šlo jen o datum publikace
+###########################################################################
+
 TRANSACTION action=BEGIN
 SPEEDMODE status=on
 
+# Log types:
+#
+$ANNOUNCEMENT_LOG = "Announcement"
+$ARCHIVE_LOG = "Archive"
+$ATTENDED_LOG = "Attended"
+$DNF_LOG = "Didn't find it"
+$ENABLE_LOG = "Enable Listing"
+$FOUND_LOG = "Found it"
+$NEEDS_ARCHIVED_LOG = "Needs Archived"
+$NEEDS_MAINTENANCE_LOG = "Needs Maintenance"
+$OWNER_MAINTENANCE_LOG = "Owner Maintenance"
+$REVIEWER_LOG = "Post Reviewer Note"
+$PUBLISH_LOG = "Publish Listing"
+$DISABLE_LOG = "Temporarily Disable Listing"
+$UNARCHIVE_LOG = "Unarchive"
+$UPDATE_LOG = "Update Coordinates"
+$PHOTO_TAKEN_LOG = "Webcam Photo Taken"
+$WILL_ATTEND_LOG = "Will Attend"
+$WRITE_NOTE_LOG = "Write note"
+
+$i = 0
 GOTO position=TOP
 WHILE NOT($_EOL)
-  SHOWSTATUS msg="$d_code - $d_name"
+  $i = $i + 1
+  SHOWSTATUS msg="$i/$_Count $d_code - $d_name"
   $v_published = CustomGet("Published")
+  $v_archived  = CustomGet("ArchivedOn")
 
-  TABLE active=LOGS scope=PARENT
-  WHILE NOT($_EOL)
-    IF $d_ltype = "Publish Listing"
-      $v_published = DATETOSQL($d_ldate)
-    ENDIF
-    GOTO position=NEXT
-  ENDWHILE
 
-  TABLE active=CACHES
-  $r = CustomPut("Published", $v_published)
-  IF LEFT($r, 7) = "*Error*"
-    SPEEDMODE status=off
-    TRANSACTION action=END
-    CANCEL msg=$r
-  ENDIF
+  #IF ($v_published = "")
+    $r = SQLITE("sql", "SELECT lDate, lType FROM logs WHERE (lType IN ('$PUBLISH_LOG', '$ARCHIVE_LOG') OR lType = '$FOUND_LOG' AND lIsOwner) AND lParent = '$d_Code'", "sqlget=0")
+    WHILE NOT($_SQLEOL)
+      $v_logType = SQLGET("ltype")
+      $v_logDate = SQLGET("lDate")
+      $r = ""
+
+      BEGINCASE
+
+      CASE $v_logType = $PUBLISH_LOG
+          $r = CustomPut("Published", $v_logDate)
+
+      CASE $v_logType = $ARCHIVE_LOG
+          $r = CustomPut("ArchivedOn", $v_logDate)
+
+      CASE $v_logType = $FOUND_LOG
+          IF ($d_FoundByMeDate = [00000000])
+            $d_FoundByMeDate = SQLTODATE($v_logDate)
+          ENDIF    
+      ENDCASE
+
+      IF LEFT($r, 7) = "*Error*"
+        SPEEDMODE status=off
+        TRANSACTION action=END
+        CANCEL msg=$r
+      ENDIF
+
+      SQLNEXT
+    ENDWHILE
+    SQLGETCLOSE
+  #ENDIF
 
   GOTO position=NEXT
 ENDWHILE
