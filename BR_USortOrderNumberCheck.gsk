@@ -1,27 +1,37 @@
 #*******************************************
-# MacVersion = 1.0
+# MacVersion = 1.1
 # MacDescription = USort Order Number Check
 # MacAuthor = Bob
 # MacFileName = BR_USortOrderNumberRepair.gsk
 # MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_USortOrderNumberCheck.gsk
 #*******************************************
-$savedFilter = SAVEFILTER()
-MFILTER where="found"
-SQLSORT orderBy="userSort ASC"
+PAUSE msg="Aktuální oznaèení bude zrušeno a nahrazeno oznaèením bodù s potenciálnì chybným èíslováním" caption="Vyhledání chyb v èíslování"
 
-$prev = 0
+$savedFilter = SAVEFILTER()
+MFILTER where="found AND cacheType NOT IN ('G', 'O', 'Y')"
+SQLSORT orderBy="userSort ASC"
+USERFLAG type=CLEAR range=ALL
+
+TRANSACTION action=BEGIN
+$prevOrdNum = 0
 $pocet = 0
 $pocetChyb = 0
 WHILE NOT($_EOL)
   $pocet = $pocet + 1
-  $rozdil = $d_UserSort - $prev
+  $rozdil = $d_UserSort - $prevOrdNum
   IF $rozdil <> 1
     $pocetChyb = $pocetChyb + 1
-    MSGOK msg="$d_code '$d_name' - poøadové èíslo $d_UserSort se od pøedchozího liší o $rozdil."
+    MSGOK msg="$d_Code '$d_Name' - poøadové èíslo $d_UserSort se od pøedchozího liší o $rozdil."
+    #
+    GOTO position=PREVIOUS
+    $d_UserFlag = TRUE
+    GOTO position=NEXT
+    $d_UserFlag = TRUE
   ENDIF
-  $prev = $d_UserSort
+  $prevOrdNum = $d_UserSort
   GOTO position=NEXT
 ENDWHILE
+TRANSACTION action=END
 
 $c = RESTOREFILTER($savedFilter, true)
 
