@@ -1,11 +1,15 @@
 #*******************************************
-# MacVersion = 1.01
+# MacVersion = 1.1
 # MacDescription = Vyfiltruje keše pøipravení k lovu.
 # MacAuthor = Bob
 # MacFileName = BR_Huntable.gsk
 # MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_Huntable.gsk
+#
+# 2014-02-23: BRoz
+#	- Podpora pro In-situ mystery keše.
 #*******************************************
 INPUT Msg="Maximální vzdálenost [km]:" Default=1000 VarName=$Distance Delay=10
 # NOT found    -- NOT FOUND by me
 # status = 'A' -- AVAILABLE
-MFilter Where=distance <= $Distance AND NOT found AND status = 'A' AND (DATE('now') - lastGpxDate) <= 62 AND (cacheType IN ('B', 'M', 'O', 'R', 'T', 'V', 'W') OR (cacheType = 'U' AND hasCorrected))
+#MFilter Where=distance <= $Distance AND NOT found AND status = 'A' AND (DATE('now') - lastGpxDate) <= 62 AND (cacheType IN ('B', 'M', 'O', 'R', 'T', 'V', 'W') OR (cacheType = 'U' AND (hasCorrected OR custom("Insitu"))))
+MFilter Where=distance <= $Distance AND NOT found AND status = 'A' AND (DATE('now') - lastGpxDate) <= 62 AND (cacheType IN ('B', 'M', 'O', 'R', 'T', 'V', 'W') OR (cacheType = 'U' AND (hasCorrected )))
