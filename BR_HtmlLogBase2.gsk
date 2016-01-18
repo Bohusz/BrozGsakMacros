@@ -34,13 +34,19 @@
 #    - Pokud log neobsahuje èas (ne)nálezu, je doplnìn z GSAK.
 #    - Oprava: Doplnìní podpory pro chybìjící barvy.
 #    - Oprava: URL blogu nyní rozpoznáno i v TLD .cz, nejen .com (je to ekvivalentní).
+# 2.08 (18.1.2016 - in progress)
+#    - Zahrnutí obrázkù pøiložených k logu do generovaného HTML.
+#    - Zobecnìní detekce odkazu na GCVOTE (za úèelem jeho odstranìní).
 #*******************************************
 
 # inicializace
 VSUB status=on
+
+# Array and List  identifiers
 $STAT = 1
 $ITEMS = 2
 $WORK = 3
+$IMAGES = 4
 $BLOGS = "BLOGS"
 #
 $LOGREC_RE        = "^([-.0-9]+) +(~?\d?\d:\d\d(/\d?\d:\d\d)?)?,([^,]+),([^,]+),([^,]*)$"
@@ -62,7 +68,8 @@ $URL_YEAR_GRP  = 2
 $URL_MONTH_GRP = 3
 $URL_NAME_GRP  = 4
 #
-$NL = $_NewLine
+$NL  = $_NewLine
+$SEP = CHR(0)
 $LightBackground = "#d8e8c8"
 $OddLogRecord = TRUE
 $VERBOSE = FALSE
@@ -516,7 +523,57 @@ BEGINSUB name=htmlLog
       
   $p_text =$d_lText
   GOSUB name=bbcodeToHtml
-  $r_logHtml = "$r_logHtml<p>$r_text</p>$NL</div>$NL"
+  $r_logHtml = "$r_logHtml<p>$r_text</p>$NL"
+
+  # obrázky
+  $p_logId = "$d_lLogId"
+  GOSUB name=loadLogImages
+  GOSUB name=htmlLogImages
+  $r_logHtml = "$r_logHtml<p>$r_logImagesHtml</p>$NL"
+
+  $r_logHtml = "$r_logHtml</div>$NL"
+ENDSUB
+
+# @global array($IMAGES) 	Naètené obrázky
+# 
+# @return $rlogImagesHtml	Obrázky vyrenderované do HTML.
+#
+BEGINSUB name=htmlLogImages
+  $r_logImagesHtml = ""
+
+  $v_imgIndex = 1
+  WHILE array($IMAGES, $v_imgIndex) <> ""
+    $p_imageData = array($IMAGES, $v_imgIndex)
+    GOSUB name=htmlSingleLogImage
+    $r_logImagesHtml = "$r_logImagesHtml$NL$r_singleLogImageHtml"
+
+    $v_imgIndex = $v_imgIndex + 1
+  ENDWHILE
+
+  $v_x = removeVar("v_imgIndex")
+ENDSUB
+
+BEGINSUB name=htmlSingleLogImage
+  $v_imgName  = EXTRACT($p_imageData, $SEP, 1)
+  $v_imgDesc  = EXTRACT($p_imageData, $SEP, 2)
+  $v_imgGuid  = EXTRACT($p_imageData, $SEP, 3)
+  $v_imgUrl   = EXTRACT($p_imageData, $SEP, 4)
+  $v_imgThumb = REPLACE($v_imgGuid, "thumb/$v_imgGuid", $v_imgUrl, TRUE)
+
+  $r_singleLogImageHtml = "<div>"
+  $r_singleLogImageHtml = "$r_singleLogImageHtml<div class='separator' style='float: left; clear: both; text-align: center;'>"
+  $r_singleLogImageHtml = "$r_singleLogImageHtml<a href='$v_imgUrl'>"
+  $r_singleLogImageHtml = "$r_singleLogImageHtml<img src='$v_imgThumb' border='0'/>"
+  $r_singleLogImageHtml = "$r_singleLogImageHtml</a>"
+  $r_singleLogImageHtml = "$r_singleLogImageHtml</div>"
+  $r_singleLogImageHtml = "$r_singleLogImageHtml<div>$v_imgName<br/><i>$v_imgDesc</i></div>"
+  $r_singleLogImageHtml = "$r_singleLogImageHtml</div>"
+
+  $v_x = removeVar("v_imgName")
+  $v_x = removeVar("v_imgDesc")
+  $v_x = removeVar("v_imgGuid")
+  $v_x = removeVar("v_imgUrl")
+  $v_x = removeVar("v_imgThumb")
 ENDSUB
 
 ##################################################################################################################
@@ -587,7 +644,8 @@ BEGINSUB name=bbcodeToHtml
   #Odstranìní nechtìného textu
   #
   $r_text = RegExReplace("\n*This entry was edited by [^.]+\.", $r_text, "")
-  $r_text = RegExReplace("\s*\[size\s*=\s*1\]\s*\(dal jsem [\d.]+ \[url\s*=\s*http://www.gcvote.com\]GCVote\[/url\] body\)\[/size\]", $r_text, "")
+ #$r_text = RegExReplace("\s*\[size\s*=\s*1\]\s*\(dal jsem [\d.]+ \[url\s*=\s*http://www.gcvote.com\]GCVote\[/url\] body\)\[/size\]", $r_text, "")
+  $r_text = RegExReplace("\s*\[size\s*=\s*1\]\s*\([^[]*\[url\s*=\s*http://www.gcvote.com\]GCVote\[/url\][^[]*\)\[/size\]", $r_text, "")
   $r_text = RegExReplace("\s*\[url\s*=\s*http://kacer-bob\..*more\.\.\..*\[/url\]", $r_text, "")
 
   # Smajlíky
@@ -831,6 +889,29 @@ BEGINSUB name=getBlogUrl
   $r_url   = regexsub($URL_RE, $p_text, 1, $URL_NAME_GRP)
   $r_year  = regexsub($URL_RE, $p_text, 1, $URL_YEAR_GRP)
   $r_month = regexsub($URL_RE, $p_text, 1, $URL_MONTH_GRP)
+ENDSUB
+
+BEGINSUB name=loadLogImages
+  array($IMAGES, 0) = "100"
+  $v_imgIndex = 0
+
+  $r = SQLITE("sql", "SELECT iName, iDescription, iGuid, iImage FROM LogImages WHERE iLogId = $p_logId", "sqlget=1")
+  WHILE NOT($_SQLEOL1)
+    $v_imgIndex = $v_imgIndex + 1
+    $v_imgName  = SQLGET("iName", 1)
+    $v_imgDesc  = SQLGET("iDescription", 1)
+    $v_imgGuid  = SQLGET("iGuid", 1)
+    $v_imgUrl   = SQLGET("iImage", 1)
+    array($IMAGES, $v_imgIndex) = "$v_imgName$SEP$v_imgDesc$SEP$v_imgGuid$SEP$v_imgUrl"
+    SQLNEXT handle=1
+  ENDWHILE
+  SQLGETCLOSE handle=1
+
+  $v_x = removeVar("v_imgIndex")
+  $v_x = removeVar("v_imgName")
+  $v_x = removeVar("v_imgDesc")
+  $v_x = removeVar("v_imgGuid")
+  $v_x = removeVar("v_imgUrl")
 ENDSUB
 
 # BEGINSUB name=initStat
