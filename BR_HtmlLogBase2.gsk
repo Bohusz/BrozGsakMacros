@@ -34,7 +34,7 @@
 #    - Pokud log neobsahuje èas (ne)nálezu, je doplnìn z GSAK.
 #    - Oprava: Doplnìní podpory pro chybìjící barvy.
 #    - Oprava: URL blogu nyní rozpoznáno i v TLD .cz, nejen .com (je to ekvivalentní).
-# 2.08 (18.1.2016 - in progress)
+# 2.08 (19.1.2016 - in progress)
 #    - Zahrnutí obrázkù pøiložených k logu do generovaného HTML.
 #    - Zobecnìní detekce odkazu na GCVOTE (za úèelem jeho odstranìní).
 #*******************************************
@@ -528,12 +528,15 @@ BEGINSUB name=htmlLog
   # obrázky
   $p_logId = "$d_lLogId"
   GOSUB name=loadLogImages
+  $p_gcCode = $d_Code
   GOSUB name=htmlLogImages
   $r_logHtml = "$r_logHtml<p>$r_logImagesHtml</p>$NL"
 
   $r_logHtml = "$r_logHtml</div>$NL"
 ENDSUB
 
+# @param $p_gcCode		GC kód keše
+#
 # @global array($IMAGES) 	Naètené obrázky
 # 
 # @return $rlogImagesHtml	Obrázky vyrenderované do HTML.
@@ -550,30 +553,50 @@ BEGINSUB name=htmlLogImages
     $v_imgIndex = $v_imgIndex + 1
   ENDWHILE
 
+  IF $r_logImagesHtml <> ""
+    $r_logImagesHtml = "<table>$NL$r_logImagesHtml</table>$NL"
+  ENDIF
+
   $v_x = removeVar("v_imgIndex")
 ENDSUB
 
 BEGINSUB name=htmlSingleLogImage
-  $v_imgName  = EXTRACT($p_imageData, $SEP, 1)
+  $v_imgName  = REGEXREPLACE("^$p_gcCode\s*\S*\s+", EXTRACT($p_imageData, $SEP, 1), "")
   $v_imgDesc  = EXTRACT($p_imageData, $SEP, 2)
   $v_imgGuid  = EXTRACT($p_imageData, $SEP, 3)
   $v_imgUrl   = EXTRACT($p_imageData, $SEP, 4)
-  $v_imgThumb = REPLACE($v_imgGuid, "thumb/$v_imgGuid", $v_imgUrl, TRUE)
+  $v_imgThumb = REPLACE("/log/", "/log/thumb/", $v_imgUrl, TRUE)
+  $v_imgHtml  = ""
 
-  $r_singleLogImageHtml = "<div>"
-  $r_singleLogImageHtml = "$r_singleLogImageHtml<div class='separator' style='float: left; clear: both; text-align: center;'>"
-  $r_singleLogImageHtml = "$r_singleLogImageHtml<a href='$v_imgUrl'>"
-  $r_singleLogImageHtml = "$r_singleLogImageHtml<img src='$v_imgThumb' border='0'/>"
-  $r_singleLogImageHtml = "$r_singleLogImageHtml</a>"
-  $r_singleLogImageHtml = "$r_singleLogImageHtml</div>"
-  $r_singleLogImageHtml = "$r_singleLogImageHtml<div>$v_imgName<br/><i>$v_imgDesc</i></div>"
-  $r_singleLogImageHtml = "$r_singleLogImageHtml</div>"
+#  $v_imgHtml = "$v_imgHtml<div>"
+#  $v_imgHtml = "$v_imgHtml<div class='separator' style='float: left; clear: both;'>"
+#  $v_imgHtml = "$v_imgHtml<a href='$v_imgUrl'>"
+#  $v_imgHtml = "$v_imgHtml<img src='$v_imgThumb' border='0'/>"
+#  $v_imgHtml = "$v_imgHtml</a>"
+#  $v_imgHtml = "$v_imgHtml</div>"
+#  $v_imgHtml = "$v_imgHtml<div>$v_imgName<br/><i>$v_imgDesc</i></div>"
+#  $v_imgHtml = "$v_imgHtml</div>"
+
+  $v_imgHtml = "$v_imgHtml<tr>$NL"
+  $v_imgHtml = "$v_imgHtml  <td>"
+  $v_imgHtml = "$v_imgHtml    <div class='separator' style='clear: both; text-align: center;'>$NL"
+  $v_imgHtml = "$v_imgHtml      <a href='$v_imgUrl'><img src='$v_imgThumb' border='0'/></a>$NL"
+  $v_imgHtml = "$v_imgHtml    </div>$NL"
+  $v_imgHtml = "$v_imgHtml  </td>$NL"
+  $v_imgHtml = "$v_imgHtml  <td>$v_imgName"
+  IF $v_imgDesc <> ""
+    $v_imgHtml = "$v_imgHtml$NL    <p><i>$v_imgDesc</i></p>$NL  "
+  ENDIF
+  $v_imgHtml = "$v_imgHtml  </td>$NL"
+  $v_imgHtml = "$v_imgHtml</tr>$NL"
+  $r_singleLogImageHtml = $v_imgHtml
 
   $v_x = removeVar("v_imgName")
   $v_x = removeVar("v_imgDesc")
   $v_x = removeVar("v_imgGuid")
   $v_x = removeVar("v_imgUrl")
   $v_x = removeVar("v_imgThumb")
+  $v_x = removeVar("v_imgHtml")
 ENDSUB
 
 ##################################################################################################################
