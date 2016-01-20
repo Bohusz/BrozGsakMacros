@@ -34,8 +34,8 @@
 #    - Pokud log neobsahuje èas (ne)nálezu, je doplnìn z GSAK.
 #    - Oprava: Doplnìní podpory pro chybìjící barvy.
 #    - Oprava: URL blogu nyní rozpoznáno i v TLD .cz, nejen .com (je to ekvivalentní).
-# 2.08 (19.1.2016 - in progress)
-#    - Zahrnutí obrázkù pøiložených k logu do generovaného HTML.
+# 2.08 (20.1.2016)
+#    - Zahrnutí obrázkù pøiložených k logu do generovaného HTML (vèetnì podpory prettyPhoto).
 #    - Zobecnìní detekce odkazu na GCVOTE (za úèelem jeho odstranìní).
 #*******************************************
 
@@ -553,42 +553,49 @@ BEGINSUB name=htmlLogImages
     $v_imgIndex = $v_imgIndex + 1
   ENDWHILE
 
-  IF $r_logImagesHtml <> ""
-    $r_logImagesHtml = "<table>$NL$r_logImagesHtml</table>$NL"
-  ENDIF
+#  IF $r_logImagesHtml <> ""
+##    $r_logImagesHtml = "<table>$NL$r_logImagesHtml</table>$NL"
+#    $r_logImagesHtml = "<p>$NL$r_logImagesHtml</p>$NL"
+#  ENDIF
 
   $v_x = removeVar("v_imgIndex")
 ENDSUB
 
 BEGINSUB name=htmlSingleLogImage
-  $v_imgName  = REGEXREPLACE("^$p_gcCode\s*\S*\s+", EXTRACT($p_imageData, $SEP, 1), "")
+  $v_imgName  = EXTRACT($p_imageData, $SEP, 1)
   $v_imgDesc  = EXTRACT($p_imageData, $SEP, 2)
   $v_imgGuid  = EXTRACT($p_imageData, $SEP, 3)
   $v_imgUrl   = EXTRACT($p_imageData, $SEP, 4)
   $v_imgThumb = REPLACE("/log/", "/log/thumb/", $v_imgUrl, TRUE)
+  $v_imgShort = REGEXREPLACE("^$p_gcCode\s*\S*\s+", $v_imgName, "")
+  $v_imgAlt   =             REGEXREPLACE("^\s*(\S.*)\s*$", $v_imgName,  " alt='$1'",   "$")
+  $v_imgAlt   = $v_imgAlt + REGEXREPLACE("^\s*(\S.*)\s*$", $v_imgShort, " title='$1'", "$")
+  $v_imgTitle = REGEXREPLACE("^\s*(\S.*)\s*$", $v_imgDesc, " title='$1'", "$")
   $v_imgHtml  = ""
 
-#  $v_imgHtml = "$v_imgHtml<div>"
-#  $v_imgHtml = "$v_imgHtml<div class='separator' style='float: left; clear: both;'>"
-#  $v_imgHtml = "$v_imgHtml<a href='$v_imgUrl'>"
-#  $v_imgHtml = "$v_imgHtml<img src='$v_imgThumb' border='0'/>"
-#  $v_imgHtml = "$v_imgHtml</a>"
-#  $v_imgHtml = "$v_imgHtml</div>"
-#  $v_imgHtml = "$v_imgHtml<div>$v_imgName<br/><i>$v_imgDesc</i></div>"
-#  $v_imgHtml = "$v_imgHtml</div>"
-
-  $v_imgHtml = "$v_imgHtml<tr>$NL"
-  $v_imgHtml = "$v_imgHtml  <td>"
-  $v_imgHtml = "$v_imgHtml    <div class='separator' style='clear: both; text-align: center;'>$NL"
-  $v_imgHtml = "$v_imgHtml      <a href='$v_imgUrl'><img src='$v_imgThumb' border='0'/></a>$NL"
-  $v_imgHtml = "$v_imgHtml    </div>$NL"
-  $v_imgHtml = "$v_imgHtml  </td>$NL"
-  $v_imgHtml = "$v_imgHtml  <td>$v_imgName"
-  IF $v_imgDesc <> ""
-    $v_imgHtml = "$v_imgHtml$NL    <p><i>$v_imgDesc</i></p>$NL  "
-  ENDIF
-  $v_imgHtml = "$v_imgHtml  </td>$NL"
-  $v_imgHtml = "$v_imgHtml</tr>$NL"
+##  $v_imgHtml = "$v_imgHtml<div>"
+##  $v_imgHtml = "$v_imgHtml<div class='separator' style='float: left; clear: both;'>"
+##  $v_imgHtml = "$v_imgHtml<a href='$v_imgUrl'>"
+##  $v_imgHtml = "$v_imgHtml<img src='$v_imgThumb' border='0'/>"
+##  $v_imgHtml = "$v_imgHtml</a>"
+##  $v_imgHtml = "$v_imgHtml</div>"
+##  $v_imgHtml = "$v_imgHtml<div>$v_imgName<br/><i>$v_imgDesc</i></div>"
+##  $v_imgHtml = "$v_imgHtml</div>"
+#
+#  $v_imgHtml = "$v_imgHtml<tr>$NL"
+#  $v_imgHtml = "$v_imgHtml  <td>"
+#  $v_imgHtml = "$v_imgHtml    <div class='separator' style='clear: both; text-align: center;'>$NL"
+  $v_imgHtml = "$v_imgHtml      <a href='$v_imgUrl'$v_imgTitle rel='prettyPhoto[logPhotos]'>$NL"
+  $v_imgHtml = "$v_imgHtml        <img src='$v_imgThumb' border='0'$v_imgAlt/>$NL"
+  $v_imgHtml = "$v_imgHtml      </a>$NL"
+#  $v_imgHtml = "$v_imgHtml    </div>$NL"
+#  $v_imgHtml = "$v_imgHtml  </td>$NL"
+#  $v_imgHtml = "$v_imgHtml  <td>$v_imgName"
+#  IF $v_imgDesc <> ""
+#    $v_imgHtml = "$v_imgHtml$NL    <p><i>$v_imgDesc</i></p>$NL  "
+#  ENDIF
+#  $v_imgHtml = "$v_imgHtml  </td>$NL"
+#  $v_imgHtml = "$v_imgHtml</tr>$NL"
   $r_singleLogImageHtml = $v_imgHtml
 
   $v_x = removeVar("v_imgName")
@@ -596,6 +603,8 @@ BEGINSUB name=htmlSingleLogImage
   $v_x = removeVar("v_imgGuid")
   $v_x = removeVar("v_imgUrl")
   $v_x = removeVar("v_imgThumb")
+  $v_x = removeVar("v_imgAlt")
+  $v_x = removeVar("v_imgTitle")
   $v_x = removeVar("v_imgHtml")
 ENDSUB
 
