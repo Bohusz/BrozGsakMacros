@@ -1,0 +1,63 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Vyhledá blízko ležící keše
+# MacAuthor = roztocil
+# MacFileName = BR_FindCloseCaches.gsk
+# MacUrl =
+#*******************************************
+# - Jedna tisícina minuty je (na rovníku) cca 1,8 metru.
+# - 161 metrù je pak cca 87 tisícin minuty.
+# Pro zaèátek budeme pro jednoduchost považovat za blízké všechny keše, které jsou blíže než 60 tisíci minuty, tj. 0,001°.
+#
+$CLEAR_USERFLAG = "UPDATE Caches SET UserFlag = 0"
+$SET_USERFLAG   = ""
+$SET_USERFLAG   = $SET_USERFLAG + "UPDATE Caches SET UserFlag = 1"
+$SET_USERFLAG   = $SET_USERFLAG + " WHERE EXISTS (SELECT OtherCaches.Code FROM Caches OtherCaches"
+$SET_USERFLAG   = $SET_USERFLAG +                " WHERE Caches.Code <> OtherCaches.Code"
+$SET_USERFLAG   = $SET_USERFLAG +                "   AND (0.001*0.001) > ((Caches.Longitude - OtherCaches.Longitude)"
+$SET_USERFLAG   = $SET_USERFLAG +                                       "*(Caches.Longitude - OtherCaches.Longitude)"
+$SET_USERFLAG   = $SET_USERFLAG +                                     " + (Caches.Latitude - OtherCaches.Latitude)"
+$SET_USERFLAG   = $SET_USERFLAG +                                       "*(Caches.Latitude - OtherCaches.Latitude))"
+$SET_USERFLAG   = $SET_USERFLAG +               ")"
+
+$x = SQLITE("sql", $CLEAR_USERFLAG)
+$x = SQLITE("sql", $SET_USERFLAG)
+
+### TRANSACTION action=BEGIN
+### #
+### $pozice = 0
+### GOTO position=TOP
+### WHILE NOT($_EOL)
+###   $code      = $d_code
+###   $longitude = VAL($d_longitude)
+###   $latitude  = VAL($d_latitude)
+###   $isClose   = FALSE
+###   #------------------------------------------ vnitøní cyklus -----
+###   GOTO position=TOP
+###   # Pøeskoèíme ty, co jsme už jednou prošli.
+###   GOTO position=$pozice
+###   # A taky pøeskoèíme tu aktuální, že.
+###   GOTO position=NEXT
+###   WHILE NOT($_EOL)
+###     IF $d_code <> $code
+###       $distance = SQRT(SQR($longitude - VAL($d_longitude)) + SQR($latitude - VAL($d_latitude)))
+###       IF $distance < 0.001
+###         $d_userFlag = TRUE
+###         $isClose = TRUE
+###       ENDIF
+###     ENDIF
+###     GOTO position=NEXT
+###   ENDWHILE
+###   #---------------------------------------------------------------
+###   # GOTO position=NEXT
+###   GOTO position=TOP
+###   GOTO position=$pozice
+###   IF $isClose
+###     $d_userFlag = TRUE
+###   ENDIF
+###   GOTO position=NEXT
+###   $pozice = $pozice + 1
+### ENDWHILE
+### #
+### TRANSACTION action=END
+

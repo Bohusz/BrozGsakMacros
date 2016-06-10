@@ -1,0 +1,13 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = BR_EXPORT_Vyreseno
+# MacAuthor = roztocil
+# MacFileName = BR_EXPORT_Vyreseno.gsk
+# MacUrl =
+#*******************************************
+$_Special = ""
+IF CustomGet("OnSite") = "1"
+  $_Special = "*"
+IF $d_HasCorrected
+  $_Special = "+"
+ENDIF
