@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 2.08
+# MacVersion = 2.09
 # MacDescription = Tabulka keší + my logs do blogger.com
 # MacAuthor = Bohusz
 # MacFileName = BR_HtmlLogBase2.gsk
@@ -37,6 +37,8 @@
 # 2.08 (20.1.2016)
 #    - Zahrnutí obrázkù pøiložených k logu do generovaného HTML (vèetnì podpory prettyPhoto).
 #    - Zobecnìní detekce odkazu na GCVOTE (za úèelem jeho odstranìní).
+# 2.09 (3.4.2016)
+#    - Podpora pro Markdown (nový formát logù).
 #*******************************************
 
 # inicializace
@@ -63,10 +65,10 @@ $BLOGITEM_NAME_GRP  = 3
 $BLOGITEM_YEAR_GRP  = 5
 $BLOGITEM_MONTH_GRP = 6
 #
-$URL_RE        = "\[url=http://kacer-bob.blogspot.(com|cz)/(\d+)/(\d+)/([^.]+).html\]"
-$URL_YEAR_GRP  = 2
-$URL_MONTH_GRP = 3
-$URL_NAME_GRP  = 4
+$URL_RE        = "\[url=http://kacer-bob.blogspot.(com|cz)/((\d+)/(\d+)|p)/([^.]+).html\]"
+$URL_YEAR_GRP  = 3
+$URL_MONTH_GRP = 4
+$URL_NAME_GRP  = 5
 #
 $NL  = $_NewLine
 $SEP = CHR(0)
@@ -95,8 +97,9 @@ ENDIF
 
 $savedFilter = saveFilter()
 $currentPosition = $d_Code
-#MFILTER where=code IN (SELECT lParent FROM logs WHERE date(lDate) BETWEEN date($datFrom) AND date($datUpto) AND lIsOwner) OR foundByMeDate BETWEEN date($datFrom) AND date($datUpto) OR dnfDate BETWEEN date($datFrom) AND date($datUpto)
-MFILTER where=code IN (SELECT lParent FROM logs WHERE date(lDate) BETWEEN date($minDate) AND date($maxDate) AND lIsOwner) OR foundByMeDate BETWEEN date($mindate) AND date($maxDate) OR dnfDate BETWEEN date($minDate) AND date($maxDate)
+IF NOT($rbtAll)
+   MFILTER where=code IN (SELECT lParent FROM logs WHERE date(lDate) BETWEEN date($minDate) AND date($maxDate) AND lIsOwner) OR foundByMeDate BETWEEN date($mindate) AND date($maxDate) OR dnfDate BETWEEN date($minDate) AND date($maxDate)
+ENDIF
 
 GOSUB name=lookupData
 
@@ -521,8 +524,21 @@ BEGINSUB name=htmlLog
   ENDIF
   $r_logHtml = "$r_logHtml)</p>$NL"
       
-  $p_text =$d_lText
-  GOSUB name=bbcodeToHtml
+  $p_text = $d_lText
+  GOSUB name=guessFormat
+  BEGINCASE
+    CASE $r_result = "HTML"
+      GOSUB name=tidyHtml
+
+    CASE $r_result = "BBCODE"
+      GOSUB name=bbcodeToHtml
+
+    CASE $r_result = "MARKDOWN"
+      GOSUB name=markdownToHtml
+
+    OTHERWISE
+      GOSUB name=markdownToHtml
+  ENDCASE
   $r_logHtml = "$r_logHtml<p>$r_text</p>$NL"
 
   # obrázky
@@ -670,6 +686,19 @@ BEGINSUB name=logIcon
   $r_iconUrl = "http://www.xlii.cz/img/gc/icon_$p_iconType.png"
 ENDSUB
 
+BEGINSUB name=guessFormat
+  $r_result = ""
+  IF RegEx("<[a-zA-Z]+/?>", $p_text) OR RegEx("<[a-zA-Z]+\s>", $p_text)
+    $r_result = "HTML"
+  ENDIF
+  IF RegEx("\[\s*[a-zA-Z*]+=?\s*\]", $p_text)
+    $r_result = "BBCODE"
+  ENDIF
+  IF RegEx("\[[^\]]*\]\s*\(\w+://[^)]*\)", $p_text)
+    $r_result = "MARKDOWN"
+  ENDIF
+ENDSUB
+
 BEGINSUB name=bbcodeToHtml
   $r_text = $p_text
 
@@ -684,9 +713,13 @@ BEGINSUB name=bbcodeToHtml
   #
   $r_text = Replace("[:)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile.gif' alt=':)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[:D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_big.gif' alt=':D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:d]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_big.gif' alt=':D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[8D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_cool.gif' alt='8D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[8d]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_cool.gif' alt='8D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[:I]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blush.gif' alt=':I' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:i]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blush.gif' alt=':I' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[:P]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_tongue.gif' alt=':P' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:p]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_tongue.gif' alt=':P' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[}:)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_evil.gif' alt='}:)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[;)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_wink.gif' alt=';)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[:o)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_clown.gif' alt=':o' style='border: 0px; vertical-align: middle;'/>", $r_text) 
@@ -697,10 +730,15 @@ BEGINSUB name=bbcodeToHtml
   $r_text = Replace("[:O]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shock.gif' alt=':O' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[:(!]", "<img src='http://www.xlii.cz/img/gc/icon_smile_angry.gif' alt=':(!' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[xx(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[Xx(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[xX(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[XX(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[|)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sleepy.gif' alt='|)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[:X]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_kisses.gif' alt=':X' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:x]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_kisses.gif' alt=':X' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[^]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_approve.gif' alt='^' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[V]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_dissapprove.gif' alt='v' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[v]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_dissapprove.gif' alt='v' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[?]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_question.gif' alt='?' style='border: 0px; vertical-align: middle;'/>", $r_text) 
 
   # HTML - styly
@@ -752,6 +790,89 @@ BEGINSUB name=bbcodeToHtml
   $r_text = RegExReplace("<p>(\r*\n)+", $r_text, "<p>$NL") 
   $r_text = RegExReplace("(\r*\n)+</p>", $r_text, "</p>") 
   $r_text = RegExReplace("(\r*\n)+", $r_text, "<br/>$NL") 
+
+  # Postprocessing
+  $r_text = Replace("<p></p>", "", $r_text) 
+ENDSUB
+
+BEGINSUB name=markdownToHtml
+  $r_text = $p_text
+
+  #Odstranìní nechtìného textu
+  #
+  $r_text = RegExReplace("\n*This entry was edited by [^.]+\.",                                 $r_text, "")
+  $r_text = RegExReplace("\s*\([^(]*\[\s*GCVote\s*\]\s*\(\s*http://www.gcvote.com\s*\)[^)]*\)", $r_text, "")
+  $r_text = RegExReplace("\s*\**\[[^\]]*\]\s*\**\s*\(\s*http://kacer-bob\.[^)]+\)\s*\**",       $r_text, "")
+
+  # Smajlíky
+  #
+  $r_text = Replace("[:)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile.gif' alt=':)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_big.gif' alt=':D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:d]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_big.gif' alt=':D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[8D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_cool.gif' alt='8D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[8d]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_cool.gif' alt='8D' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:I]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blush.gif' alt=':I' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:i]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blush.gif' alt=':I' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:P]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_tongue.gif' alt=':P' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:p]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_tongue.gif' alt=':P' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[}:)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_evil.gif' alt='}:)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[;)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_wink.gif' alt=';)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:o)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_clown.gif' alt=':o' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[B)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blackeye.gif' alt='B)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[8]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_8ball.gif' alt='8' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:(]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sad.gif' alt=':(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[8)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shy.gif' alt='8)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:O]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shock.gif' alt=':O' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:(!]", "<img src='http://www.xlii.cz/img/gc/icon_smile_angry.gif' alt=':(!' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[xx(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[Xx(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[xX(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[XX(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[|)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sleepy.gif' alt='|)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:X]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_kisses.gif' alt=':X' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[:x]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_kisses.gif' alt=':X' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[^]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_approve.gif' alt='^' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[V]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_dissapprove.gif' alt='v' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[v]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_dissapprove.gif' alt='v' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+  $r_text = Replace("[?]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_question.gif' alt='?' style='border: 0px; vertical-align: middle;'/>", $r_text) 
+
+  # HTML - odrážky
+  $r_text = RegExReplace("(\r*\n)(\*\s\s*.*)(\r*\n)([^*])",      $r_text,  "<ul>\2</ul>\3\4",             "\")
+  $r_text = RegExReplace("^\*\s*(.*)$",                          $r_text,  "<li>\1</li>",                 "\")
+  #
+  $r_text = RegExReplace("(\r*\n)(\d+\s*\.\s+.*)(\r*\n)([^\d])", $r_text,  "<ol>\2</ol>\3\4",             "\")
+  $r_text = RegExReplace("^(\d+)\.\s*(.*)$",                     $r_text,  "<li value='\1'>\2</li>",      "\")
+  #
+  $r_text = RegExReplace("(\r*\n)(>.*)(\r*\n)([^>])",            $r_text,  "<blockquote>\2</blockquote>", "\")
+  $r_text = RegExReplace("(\r*\n)>\s*(.*)$",                     $r_text,  "<div>\1</div>",               "\")
+
+  # HTML - styly
+  $r_text = RegExReplace("\*\*(.*)\*\*", $r_text, "<b>\1</b>", "\")
+  $r_text = RegExReplace("\*([^*]*)\*",  $r_text, "<i>\1</i>", "\")
+
+  # HTML - odkazy
+  $r_text = RegExReplace("\[([^\]]*)\]\s*\(\s*([^)]*)\s*\)", $r_text, "<a href='\2'>\1</a>", "\") 
+
+  # Konce øádkù
+  $r_text = RegExReplace("<p>(\r*\n)+",  $r_text, "<p>$NL") 
+  $r_text = RegExReplace("(\r*\n)+</p>", $r_text, "</p>") 
+  $r_text = RegExReplace("(\r*\n)+",     $r_text, "<br/>$NL") 
+
+  # Jiné
+  $r_text = RegExReplace("^---+", $r_text, "<hr/>") 
+
+  # Postprocessing
+  $r_text = Replace("<p></p>", "", $r_text) 
+ENDSUB
+
+BEGINSUB name=tidyHtml
+  $r_text = $p_text
+
+  #Odstranìní nechtìného textu
+  #
+  $r_text = RegExReplace("This entry was edited by [^.]+\.", $r_text, "")
+  $r_text = RegExReplace("\([^)]*<a\s+href\s*=\s*'http://www.gcvote.com\.*</a>[^)]*\)", $r_text, "")
+  $r_text = RegExReplace("<a\s+href\s*=\s*'http://kacer-bob\..*</a>", $r_text, "")
 ENDSUB
 
 # Zmìní velikost pole na zadaný poèet prvkù.
@@ -946,212 +1067,6 @@ BEGINSUB name=loadLogImages
   $v_x = removeVar("v_imgUrl")
 ENDSUB
 
-# BEGINSUB name=initStat
-#   array($STAT, 0) = "256"
-#   array($STAT, -1) = "0"
-#   $date = [00000000]
-# ENDSUB
-# 
-# BEGINSUB name=onDNF_BEGIN
-#   IF $d_DNF
-#     $r_item = "$r_item<i><font color='#808080'>"
-#   ENDIF
-# ENDSUB
-# 
-# BEGINSUB name=onDNF_END
-#   IF $d_DNF
-#     $r_item = "$r_item</font></i>"
-#   ENDIF
-# ENDSUB
-# 
-# BEGINSUB name=countStat
-#   BEGINCASE
-#     CASE $d_found
-#       array($STAT, 1) = numToStr(val(array($STAT, 1)) + 1)
-#       array($STAT, asc($d_cacheType)) = numToStr(val(array($STAT, asc($d_cacheType))) + 1)
-#       IF $d_foundByMeDate > $date
-#         $date = $d_foundByMeDate
-#       ENDIF
-#     CASE $d_dnf
-#       array($STAT, 2) = numToStr(val(array($STAT, 2)) + 1)
-#       IF $d_dnfDate > $date
-#         $date = $d_dnfDate
-#       ENDIF
-#   ENDCASE
-# ENDSUB
-# 
-# BEGINSUB name=getMyFoundItLog
-#   TABLE Active=Logs Scope=Parent
-# 
-#   $myFoundItLog=0
-#   WHILE NOT($_EOL)
-#     IF $d_lIsOwner AND $d_lType = "Found it"
-#       $myFoundItLog = $d_lLogid
-#     ENDIF
-#     GOTO position=NEXT
-#   ENDWHILE
-# 
-#   TABLE Active=Caches
-# ENDSUB
-# 
-# BEGINSUB name=getMyLogs
-#    $result=""
-#    GOTO position=TOP
-#    WHILE NOT($_EOL)
-#       IF $_FilterActive OR $d_UserFlag
-#          GOSUB name=getMyLogRecord
-#          $result = "$result$NL$getMyLogRecord_result"
-#       ENDIF
-#       GOTO position=NEXT
-#    ENDWHILE
-# ENDSUB
-# 
-# # getMyLogRecord
-# # ==============
-# # Naète mé logy k aktuálnì vybranému záznamu.
-# #
-# # @return $getMyLogRecord_result
-# #
-# BEGINSUB name=getMyLogRecord
-#   TABLE Active=Logs Scope=Parent
-#   $getMyLogRecord_result = ""
-# 
-#   GOTO position=TOP
-#   WHILE NOT($_EOL)
-#     IF $d_lIsOwner AND $d_lDate >= $minDate AND $d_lDate <= $maxDate
-#       IF $OddLogRecord
-#         $getMyLogRecord_result = "$getMyLogRecord_result<div style='background: $LightBackground; outline: 5pt solid $LightBackground;'>"
-#       ELSE
-#         $getMyLogRecord_result = "$getMyLogRecord_result<div>"
-#       ENDIF
-#       $OddLogRecord = NOT($OddLogRecord)
-# 
-#       $par1 = $d_lType
-#       GOSUB name=logIcon
-# 
-#       $getMyLogRecord_result = "$getMyLogRecord_result<p><img src='$logIcon' alt=" + QUOTE("[$d_lType]") + " style='border: 0px; vertical-align: middle;'/><b>"
-#       IF $minDate <> $maxDate
-#         #$result = $result + str(val(subStr(dateToString($d_lDate), 7, 2))) + "." + str(val(subStr(dateToString($d_lDate), 5, 2))) + ". "
-#         $getMyLogRecord_result = "$getMyLogRecord_result " + dateFormat($d_lDate)
-#       ENDIF
-#       $getMyLogRecord_result = "$getMyLogRecord_result $d_Code - $d_Name</b> ($d_OwnerName, placed $d_PlacedDate"
-#       IF $d_OwnerName <> $d_PlacedBy
-#         $getMyLogRecord_result = "$getMyLogRecord_result by $d_PlacedBy"
-#       ENDIF
-#       $getMyLogRecord_result = "$getMyLogRecord_result)</p>$NL"
-#       
-#       $par1=$d_lText
-#       GOSUB name=bbcodeToHtml
-#       $getMyLogRecord_result = "$getMyLogRecord_result<p>$bbcodeToHtml_result</p>$NL</div>$NL"
-# 
-#     ENDIF
-#     GOTO position=NEXT
-#   ENDWHILE
-# 
-#   TABLE Active=Caches
-# ENDSUB
-# 
-# BEGINSUB name=logIcon
-#   BEGINCASE
-#     CASE $par1 = "Didn't find it"
-#       $logIcon = "http://www.xlii.cz/img/gc/Not Found.png"
-#     OTHERWISE
-#       $logIcon = "http://www.xlii.cz/img/gc/$par1.png"
-#   ENDCASE
-# ENDSUB
-# 
-# BEGINSUB name=bbcodeToHtml
-#   $bbcodeToHtml_result = $par1
-# 
-#   #Odstranìní nechtìného textu
-#   #
-#   $bbcodeToHtml_result = RegExReplace("\n*This entry was edited by [^.]+\.", $bbcodeToHtml_result, "")
-#   $bbcodeToHtml_result = RegExReplace("\[url\s*=\s*http://kacer-bob\..*more\.\.\..*\[/url\]", $bbcodeToHtml_result, "")
-# 
-#   # Smajlíky
-#   #
-#   $bbcodeToHtml_result = Replace("[:)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile.gif' alt=':)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[:D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_big.gif' alt=':D' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[8D]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_cool.gif' alt='8D' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[:I]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blush.gif' alt=':I' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[:P]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_tongue.gif' alt=':P' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[}:)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_evil.gif' alt='}:)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[;)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_wink.gif' alt=';)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[:o)]", "<img src='http://www.xlii.cz/img/gc/icon_smile_clown.gif' alt=':o' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[B)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_blackeye.gif' alt='B)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[8]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_8ball.gif' alt='8' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[:(]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sad.gif' alt=':(' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[8)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shy.gif' alt='8)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[:O]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_shock.gif' alt=':O' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[:(!]", "<img src='http://www.xlii.cz/img/gc/icon_smile_angry.gif' alt=':(!' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[xx(]", "<img src='http://www.xlii.cz/img/gc/icon_smile_dead.gif' alt='xx(' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[|)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_sleepy.gif' alt='|)' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[:X]",  "<img src='http://www.xlii.cz/img/gc/icon_smile_kisses.gif' alt=':X' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[^]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_approve.gif' alt='^' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[V]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_dissapprove.gif' alt='v' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-#   $bbcodeToHtml_result = Replace("[?]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_question.gif' alt='?' style='border: 0px; vertical-align: middle;'/>", $bbcodeToHtml_result) 
-# 
-#   # HTML - styly
-#   $bbcodeToHtml_result = Replace("[b]",  "<b>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/b]", "</b>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[i]",  "<i>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/i]", "</i>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[u]",  "<u>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/u]", "</u>", $bbcodeToHtml_result)
-# 
-#   $bbcodeToHtml_result = Replace("[highlight]",  "<i>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/highlight]", "</i>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[code]",  "<pre>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/code]", "</pre>", $bbcodeToHtml_result)
-# 
-#   $bbcodeToHtml_result = Replace("[p]",  "<p>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/p]", "</p>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[br]",  "<br/>",  $bbcodeToHtml_result)
-# 
-#   # HTML - barva textu
-#   $bbcodeToHtml_result = Replace("[black]",  "<font color='black'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/black]", "</font>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[blue]",  "<font color='blue'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/blue]", "</font>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[red]",  "<font color='red'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/red]", "</font>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[purple]",  "<font color='purple'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/purple]", "</font>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[pink]",  "<font color='pink'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/pink]", "</font>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[orange]",  "<font color='orange'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/orange]", "</font>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[yellow]",  "<font color='yellow'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/yellow]", "</font>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[green]",  "<font color='green'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/green]", "</font>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[white]",  "<font color='white'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/white]", "</font>", $bbcodeToHtml_result)
-# 
-#   # HTML - zarovnání textu
-#   $bbcodeToHtml_result = Replace("[left]",  "<div align='left'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/left]", "</div>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[center]",  "<div align='center'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/center]", "</div>", $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[right]",  "<div align='right'>",  $bbcodeToHtml_result)
-#   $bbcodeToHtml_result = Replace("[/right]", "</div>", $bbcodeToHtml_result)
-# 
-#   # HTML - velikost textu
-#   $bbcodeToHtml_result = RegExReplace("\[size\s*=\s*", $bbcodeToHtml_result, "<font size=") 
-#   $bbcodeToHtml_result = Replace("[/size]", "</font>", $bbcodeToHtml_result) 
-# 
-#   # HTML - odkazy
-#   $bbcodeToHtml_result = RegExReplace("\[url\s*=\s*", $bbcodeToHtml_result, "<a href=") 
-#   $bbcodeToHtml_result = Replace("[/url]", "</a>", $bbcodeToHtml_result) 
-# 
-#   $bbcodeToHtml_result = Replace("]", ">", $bbcodeToHtml_result) 
-# 
-#   # Konce øádkù
-#   $bbcodeToHtml_result = RegExReplace("<p>(\r*\n)+", $bbcodeToHtml_result, "<p>$NL") 
-#   $bbcodeToHtml_result = RegExReplace("(\r*\n)+</p>", $bbcodeToHtml_result, "</p>") 
-#   $bbcodeToHtml_result = RegExReplace("(\r*\n)+", $bbcodeToHtml_result, "<br/>$NL") 
-# ENDSUB
-
 BEGINSUB name=VstupniFormular
   $rbtAll = true
   $rbtLogDate = false
@@ -1164,14 +1079,6 @@ BEGINSUB name=VstupniFormular
 
   $VstupniFormular = editForm($VstupniFormular, "frmVstupniFormular", "delay", "7")
   WHILE true
-    #IF $rbtLogDate
-    #  $VstupniFormular = editForm($VstupniFormular, "datFrom", "Enabled", "Yes")
-    #  $VstupniFormular = editForm($VstupniFormular, "datUpto", "Enabled", "Yes")
-    #ELSE
-    #  $VstupniFormular = editForm($VstupniFormular, "datFrom", "Enabled", "No")
-    #  $VstupniFormular = editForm($VstupniFormular, "datUpto", "Enabled", "No")
-    #ENDIF
-
     $exit = form($VstupniFormular, "")
     $VstupniFormular = editForm($VstupniFormular, "frmVstupniFormular", "delay", "")
     $VERBOSE = $chbVerbose
