@@ -39,6 +39,8 @@
 #    - Zobecnìní detekce odkazu na GCVOTE (za úèelem jeho odstranìní).
 # 2.09 (3.4.2016)
 #    - Podpora pro Markdown (nový formát logù).
+# 2.10 (9.10.2017)
+#    - Oprava rozmìrù tabulky, zdá se, že se to zaèalo chápat jinak.
 #*******************************************
 
 # inicializace
@@ -337,9 +339,9 @@ BEGINSUB name=processTable
 
   $r_table = "<table border='1' style='width: 100%; border-collapse: collapse;'>$NL"
   IF $minDate <> $maxDate
-    $r_table = "$r_table<col width='40'/>"
+    $r_table = "$r_table<col width='80px'/>"
   ENDIF
-  $r_table = "$r_table<col width='20'/><col width='10'/><col width='40'/>$NL"
+  $r_table = "$r_table<col width='40px'/><col width='20px'/><col width='80px'/>$NL"
 
   $v_prevDate = [00000000]
   $v_index = 1
