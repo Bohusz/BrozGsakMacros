@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 1.06
+# MacVersion = 1.08
 # MacDescription = PrepareFieldNotes
 # MacAuthor = roztocil
 # MacFileName = BR_PrepareFieldNotes.gsk
@@ -20,31 +20,44 @@
 # 1.06 2017-03-23:
 #    - oprava pøeklepu v URL pro nezaøazené keše,
 #    - zmìna formátování odkazu na blog z UBB na Markdown
+# 1.07 2017-12-28:
+#    - nová volba "Use Stored Blog Name", která, pokud je naplnìn uživatelský atribut
+#      "BlogPageName", sestaví URL stránky ze základu URL a hodnoty tohoto atributu
+# 1.08 2018-01-07:
+#    - po sestavení dat se zobrazí dialog, umožòující:
+#      - editaci vygenerovaných dat
+#      - uložení zmìn do souboru
+#      - otevøení souboru v "poznámkovém bloku"
+#      - nahrání zobrazených (a pøípadnì zeditovaných) dat pøímo na GEOCACHING.COM
+#    - dialog se sám zavøe po 15 sekundách neèinnosti
 #**************************************************************************************
 
 DECLARE var=$NULL type=NUMERIC
-#$NEZARAZENO_URL = "http://kacer-bob.blogspot.cz/2014/02/nezarazeno.html"
-$NEZARAZENO_URL = "http://kacer-bob.blogspot.cz/p/nerazene.html"
-$GEOPIVO_URL = "http://kacer-bob.blogspot.cz/p/ge.html"
-$NODATE = [00000000]
-$NL = CHR(13) + CHR(10)
+$BASE_URL         = "http://kacer-bob.blogspot.cz"
+$NEZARAZENO_OLD   = "http://kacer-bob.blogspot.cz/2014/02/nezarazeno.html"
+$NEZARAZENO_URL   = "$BASE_URL/p/nerazene.html"
+$GEOPIVO_URL      = "$BASE_URL/p/ge.html"
+$STORED_BLOG_NAME = "BlogPageName"
+$NODATE           = [00000000]
+$NL               = CHR(13) + CHR(10)
 
-GOSUB name=ReadForm
+GOSUB name=ReadMainForm
 
-IF NOT($AppendToFile) AND FileExists($TargetFieldNotesFile)
-  FileErase file=$TargetFieldNotesFile onerror=ABORT
-  # zapíšeme BOM
-  $result = AppendFile($TargetFieldNotesFile, UTF16("", "e"))
-  GOSUB name=CheckFileOpResult
+IF NOT($AppendToFile) OR NOT(FileExists($TargetFieldNotesFile))
+  $p_filename = $TargetFieldNotesFile
+  GOSUB name=PrepareFile
 ENDIF
+
 BEGINCASE
   CASE $NotFiled
-    $blog_url = $NEZARAZENO_URL
+    $global_blog_url = $NEZARAZENO_URL
   CASE $Geopivo
-    $blog_url = $GEOPIVO_URL
+    $global_blog_url = $GEOPIVO_URL
   OTHERWISE
-    $blog_url = $BlogUrl
+    $global_blog_url = $BlogUrl
 ENDCASE
+
+$allFieldNotes = ""
 
 GOTO position=TOP
 WHILE NOT($_EOL)
@@ -82,7 +95,7 @@ WHILE NOT($_EOL)
       $logType = "Attended"
     CASE $d_cacheType = "W"
       # Webcam keše.
-      $logType = "Webcam photo taken"
+      $logType = "Webcam Photo Taken"
     OTHERWISE
       # Ostatní snad jsou podobné standardním... :-\
       $logType = "Found it"
@@ -98,6 +111,10 @@ WHILE NOT($_EOL)
     GOSUB name=LogTextSeparator
     $logText = "$logText$d_userData - "
   ENDIF
+  $blog_url = $global_blog_url
+  IF $UseStoredBlogName
+    GOSUB name=PrepareStoredUrlIfExists
+  ENDIF
   IF NOT(ISEMPTY($blog_url))
     GOSUB name=LogTextSeparator
     # UBB: $logText = "$logText[url=$blog_url][size=1][i]more...[/i][/size][/url]"
@@ -107,14 +124,27 @@ WHILE NOT($_EOL)
   $line = "$d_code,$timeStamp,$logType,"
   $line = $line + QUOTE("$logText")
   $line = "$line$NL"
-  $line = UTF16($line, "e")
-  # Odstraníme BOM
-  $line = SUBSTR($line, 3, 0)
 
-  $result = AppendFile($TargetFieldNotesFile, $line)
-  GOSUB name=CheckFileOpResult
+  $allFieldNotes = "$allFieldNotes$line"
+
+  $p_filename = $TargetFieldNotesFile
+  $p_text     = $line
+  GOSUB name=WriteTextToFile
+
   GOTO position=NEXT
 ENDWHILE
+
+GOSUB name=ReadFinalForm
+
+RETURN
+#--------------------------------------------------------------------------------------
+
+BEGINSUB name=PrepareStoredUrlIfExists
+  $xx_blogName = CustomGet($STORED_BLOG_NAME)
+  IF NOT(ISEMPTY($xx_blogName))
+    $blog_url = "$BASE_URL/$xx_blogName.html"
+  ENDIF
+ENDSUB
 
 BEGINSUB name=CalcTimeStamp
   $xx_date = $par1
@@ -150,6 +180,23 @@ BEGINSUB name=LogTextSeparator
   $logText = "$logText "
 ENDSUB
 
+BEGINSUB name=PrepareFile
+  IF FileExists($p_filename)
+     FileErase file=$p_filename onerror=ABORT
+  ENDIF
+  # zapíšeme BOM
+  $result = AppendFile($p_filename, UTF16("", "e"))
+  GOSUB name=CheckFileOpResult
+ENDSUB
+
+BEGINSUB name=WriteTextToFile
+  $xx_text = UTF16($p_text, "e")
+  # Odstraníme BOM
+  $xx_text = SUBSTR($xx_text, 3, 0)
+  $result = AppendFile($p_filename, $xx_text)
+  GOSUB name=CheckFileOpResult
+ENDSUB
+
 BEGINSUB name=CheckFileOpResult
   IF LEFT($result, 7) = "*Error*"
     PAUSE msg=$result
@@ -157,15 +204,15 @@ BEGINSUB name=CheckFileOpResult
   ENDIF
 ENDSUB
 
-BEGINSUB name=ReadForm
-  MacSettings type=R filecheck=N vars=TargetFieldNotesFile,BlogUrl,UtcOffset,AppendToFile
+BEGINSUB name=ReadMainForm
+  MacSettings type=R filecheck=N vars=TargetFieldNotesFile,BlogUrl,UtcOffset,AppendToFile,UseStoredBlogName
   $UseBlogUrl = TRUE
   WHILE 1=1
     $result = Form($mainForm, "")
     BEGINCASE
       CASE $result = "OkButton"
         IF IsEmpty($UtcOffset) OR REGEX("[-+]\d+", $UtcOffset)
-          MacSettings type=S vars=TargetFieldNotesFile,BlogUrl,UtcOffset,AppendToFile
+          MacSettings type=S vars=TargetFieldNotesFile,BlogUrl,UtcOffset,AppendToFile,UseStoredBlogName
           BREAK
         ENDIF
         MSGOK msg="UTC Offset must be empty or an integer with a sign."
@@ -175,15 +222,193 @@ BEGINSUB name=ReadForm
   ENDWHILE
 ENDSUB
 
-<Data> VarName=$mainForm
-#********************************************************************
-# Form generated by GSAK form designer on po 06-bøe-2017 08:23:06
-#********************************************************************
+BEGINSUB name=ReadFinalForm
+  $PreparedFieldNotes = $allFieldNotes
+  $PreparedFilePath   = $TargetFieldNotesFile
+  WHILE 1=1
+    $result = Form($finalForm, "")
+    BEGINCASE
+      CASE $result = "OpenButton"
+         RUNPGM pgm="notepad" parms="$TargetFieldNotesFile"
 
+      CASE $result = "UpdateButton"
+         $p_filename = $TargetFieldNotesFile
+         GOSUB name=PrepareFile
+
+         $p_filename = $TargetFieldNotesFile
+         $p_text     = $PreparedFieldNotes
+         GOSUB name=WriteTextToFile
+
+      CASE $result = "UploadButton"
+         $p_allDrafts = $PreparedFieldNotes
+         GOSUB name=UploadFieldNotes
+         EXITSUB
+
+      CASE $result = "CloseButton" OR $result = "SystemExit" OR $result = "DelayExit"
+         EXITSUB
+
+      OTHERWISE
+         IF YESNO("Stisknuto neznámé tlaèítko '$result'.$NL$NLChcete ukonèit program?")
+            RETURN
+         ENDIF
+    ENDCASE
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=UploadFieldNotes
+  $xx = LIST("allDrafts", "create", $NL)
+  $xx = LIST("allDrafts", "replace", $p_allDrafts)
+
+  $p_listname = "allDrafts"
+  GOSUB name=RemoveEmptyItemsFromList
+  $xx_draftCount = VAL(LIST("allDrafts", "count", ""))
+
+  SHOWSTATUS msg="Going to upload $xx_draftCount log drafts..." height=250 mtype=MULTI
+
+  $xx_lineNo = 1
+  WHILE $xx_lineNo <= $xx_draftCount
+    $p_lineToParse = LIST("allDrafts", "item", "$xx_lineNo")
+    GOSUB name=ParseFieldNoteLineToParameters
+    GOSUB name=UploadFieldNote
+    $xx_lineNo = $xx_lineNo + 1
+  ENDWHILE
+
+  $xx = LIST("allDrafts", "destroy", "")
+  SHOWSTATUS msg="Finished uploading $xx_draftCount log drafts." display=OFF
+ENDSUB
+
+BEGINSUB name=ParseFieldNoteLineToParameters
+  # IN  $p_lineToParse - øádek "ze souboru fieldNotes.txt", který má být rozebrán
+  #
+  # OUT $p_cacheGcCode - GC kód keše, ke které se loguje
+  # OUT $p_logTStamp   - èas, ke kterému se loguje, vèetnì sekund a bez 'Z' na konci
+  # OUT $p_logTypeName - typ logu, textovì
+  # OUT $p_logText     - text logu
+  # Ve všech výstupních datech jsou znaky '&', '<' a '>' nahrazeny HTML/XML entitami.
+  #
+  $p_text = $p_lineToParse
+  GOSUB name=EntityEncode
+
+  $xx = LIST("draft", "create", ",")
+  $xx = LIST("draft", "replace", $r_result)
+
+  $p_listname  = "draft"
+  $p_separator = ","
+  $p_firstItem = 4
+  $p_lastItem  = VAL(LIST("draft", "count", ""))
+  GOSUB name=JoinArrayItems
+  $xx_logText = $r_result
+
+  $p_cacheGcCode = LIST("draft", "item", "1")
+  $p_logTStamp   = LIST("draft", "item", "2")
+  $p_logTypeName = LIST("draft", "item", "3")
+  $p_logText     = REGEXREPLACE("^"+CHR(34)+"(.*)"+CHR(34)+"$", $xx_logText, "$1", "$")
+
+  # V souboru je obvykle s pøesností na minuty, GCAPI chce i sekundy.
+  $p_logTStamp   = REGEXREPLACE("T(\d\d:\d\d)Z$",      $p_logTStamp, "T$1:00Z", "$")
+  $p_logTStamp   = REGEXREPLACE("T(\d\d:\d\d:\d\d)Z$", $p_logTStamp, "T$1",     "$")
+
+  $xx = LIST("draft", "destroy", "")
+ENDSUB
+
+BEGINSUB name=EntityEncode
+  # IN  $p_text   - text, ve kterém mají být znaky '&', '<' a '>' XML entitami
+  # OUT $r_result - text se znaky nahrazenými entitami
+  #
+  $r_result = REPLACE("&", "&amp;", $p_text)
+  $r_result = REPLACE("<", "&lt;",  $r_result)
+  $r_result = REPLACE(">", "&gt;",  $r_result)
+ENDSUB
+
+BEGINSUB name=RemoveEmptyItemsFromList
+  $xx_current = VAL(LIST($p_listname, "count", ""))
+  WHILE $xx_current > 0
+    $xx_value = LIST($p_listname, "item", "$xx_current")
+    IF ALLTRIM($xx_value) = ""
+      $xx = LIST($p_listname, "delete", "$xx_current")
+    ENDIF
+    $xx_current = $xx_current - 1
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=JoinArrayItems
+  $xx_item = $p_firstItem
+  $r_result = LIST($p_listname, "item", "$xx_item")
+  WHILE $xx_item < $p_lastItem
+    $xx_item = $xx_item + 1
+    $xx = LIST($p_listname, "item", "$xx_item")
+    $r_result = "$r_result$p_separator$xx"
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=UploadFieldNote
+   SHOWSTATUS msg="Uploading '$p_logTypeName' draft for $p_cacheGcCode" height=250 mtype=MULTI
+
+   $xx_postData = $fieldNotesPostData
+   GOSUB name=LogTypNameToLogTypeId
+
+   $xx_postData = REPLACE("{LOGTYPEID}",              $r_logTypeId,   $xx_postData)
+   $xx_postData = REPLACE("{CACHEGCCODE}",            $p_cacheGcCode, $xx_postData)
+   $xx_postData = REPLACE("{LOGTSTAMP}",              $p_logTStamp,   $xx_postData)
+   $xx_postData = REPLACE("{LOGTEXT}",                $p_logText,     $xx_postData)
+   $xx_postData = REGEXREPLACE("(?s)<!--.*-->($NL)*", $xx_postData,   "")
+
+   $xx_response = GCAPI("CreateFieldNoteAndPublish", $xx_postData, "Nahrávám field note")
+   IF $_GcApiError
+      # Error running api, so show the error message and put it to clipboard, too
+      CLIP data=$xx_response
+      MSGOK msg="$xx_response"
+   ENDIF
+ENDSUB
+
+BEGINSUB name=LogTypNameToLogTypeId
+   BEGINCASE
+   CASE $p_logTypeName = "Found it"
+     $r_logTypeId = "2"
+   CASE $p_logTypeName = "Attended"
+     $r_logTypeId = "10"
+   CASE $p_logTypeName = "Webcam Photo Taken"
+     $r_logTypeId = "11"
+   CASE $p_logTypeName = "Didn't find it"
+     $r_logTypeId = "3"
+   CASE $p_logTypeName = "Needs Maintenance"
+     $r_logTypeId = "45"
+   ENDCASE
+ENDSUB
+
+#------------------------------------------------------------------------------------------
+<Data> Varname=$fieldNotesPostData
+<CreateFieldNoteAndPublishRequest xmlns="http://www.geocaching.com/Geocaching.Live/data">
+  <AccessToken>{ACCESSTOKEN}</AccessToken>
+  <CacheCode>{CACHEGCCODE}</CacheCode>
+  <WptLogTypeId>{LOGTYPEID}</WptLogTypeId>
+  <UTCDateLogged>{LOGTSTAMP}</UTCDateLogged>
+  <Note>{LOGTEXT}</Note>
+  <PromoteToLog>false</PromoteToLog>
+  <!--
+  <ImageData>
+    <FileCaption xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">String content</FileCaption>
+    <FileDescription xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">String content</FileDescription>
+    <FileName xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">String content</FileName>
+    <base64ImageData xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">String content</base64ImageData>
+  </ImageData>
+  <FavoriteThisCache>true</FavoriteThisCache>
+  -->
+  <EncryptLogText>false</EncryptLogText>
+  <!--
+  <UpdatedLatitude>1.26743233E+15</UpdatedLatitude>
+  <UpdatedLongitude>1.26743233E+15</UpdatedLongitude>
+  <Guid>1627aea5-8e0a-4371-9022-9b504344e724</Guid>
+  -->
+</CreateFieldNoteAndPublishRequest>
+<enddata>
+
+#------------------------------------------------------------------------------------------
+<Data> VarName=$mainForm
 Name = Form1
   Type = Form
   Caption = Prepare Logging FieldNotes
-  Height = 153
+  Height = 177
   Width = 506
 
 Name = Label1
@@ -254,11 +479,20 @@ Name = AppendToFile
   Taborder = 90
   Caption = Append to File
 
+Name = UseStoredBlogName
+  Type = Checkbox
+  Height = 17
+  Left = 168
+  Top = 56
+  Width = 150
+  Taborder = 90
+  Caption = Use Stored Blog Name
+
 Name = Label3
   Type = Label
   Height = 13
   Left = 8
-  Top = 64
+  Top = 88
   Width = 57
   Caption = Blog URL:
 
@@ -266,7 +500,7 @@ Name = BlogUrl
   Type = Edit
   Height = 21
   Left = 128
-  Top = 56
+  Top = 80
   Width = 361
   Taborder = 10
 
@@ -275,7 +509,7 @@ Name = OkButton
   Enter = Yes
   Height = 25
   Left = 320
-  Top = 88
+  Top = 112
   Width = 75
   Taborder = 20
   Caption = OK
@@ -285,9 +519,91 @@ Name = CancelButton
   Escape = Yes
   Height = 25
   Left = 408
-  Top = 88
+  Top = 112
   Width = 75
   Taborder = 30
   Caption = Cancel
+
+<enddata>
+
+#------------------------------------------------------------------------------------------
+<Data> VarName=$finalForm
+Name = Form2
+  Type = Form
+  Caption = Field Notes Prepared
+  Delay = 15
+  Height = 424
+  Width = 793
+
+Name = Label21
+  Type = Label
+  Height = 13
+  Left = 8
+  Top = 8
+  Width = 110
+  Caption = Prepared Field Notes:
+
+Name = PreparedFieldNotes
+  Type = Memo
+  Height = 273
+  Left = 8
+  Top = 24
+  Width = 769
+  Taborder = 1
+
+Name = Label1
+  Type = Label
+  Height = 17
+  Left = 8
+  Top = 304
+  Width = 98
+  Caption = Prepared File Path:
+
+Name = PreparedFilePath
+  Type = Edit
+  Enabled = No
+  Height = 21
+  Left = 8
+  Top = 320
+  Width = 769
+  Taborder = 2
+
+Name = UpdateButton
+  Type = Button
+  Height = 25
+  Left = 96
+  Top = 360
+  Width = 153
+  Taborder = 12
+  Caption = Save Changes to the File
+
+Name = UploadButton
+  Type = Button
+  Height = 25
+  Left = 544
+  Top = 360
+  Width = 147
+  Taborder = 13
+  Caption = Upload the Text Above
+
+Name = CloseButton
+  Type = Button
+  Enter = Yes
+  Escape = Yes
+  Height = 25
+  Left = 696
+  Top = 360
+  Width = 75
+  Taborder = 14
+  Caption = Close
+
+Name = OpenButton
+  Type = Button
+  Height = 25
+  Left = 8
+  Top = 360
+  Width = 81
+  Taborder = 15
+  Caption = Open File
 
 <enddata>
