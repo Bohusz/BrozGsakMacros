@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 2.09
+# MacVersion = 2.11
 # MacDescription = Tabulka keší + my logs do blogger.com
 # MacAuthor = Bohusz
 # MacFileName = BR_HtmlLogBase2.gsk
@@ -41,6 +41,8 @@
 #    - Podpora pro Markdown (nový formát logù).
 # 2.10 (9.10.2017)
 #    - Oprava rozmìrù tabulky, zdá se, že se to zaèalo chápat jinak.
+# 2.11 (28.12.2017)
+#    - Drobné zmìny ve formátování Markdown, hlavnì citace a podpora podtržítek vedle hvìzdièek.
 #*******************************************
 
 # inicializace
@@ -806,6 +808,33 @@ BEGINSUB name=markdownToHtml
   $r_text = RegExReplace("\s*\([^(]*\[\s*GCVote\s*\]\s*\(\s*http://www.gcvote.com\s*\)[^)]*\)", $r_text, "")
   $r_text = RegExReplace("\s*\**\[[^\]]*\]\s*\**\s*\(\s*http://kacer-bob\.[^)]+\)\s*\**",       $r_text, "")
 
+  # HTML - odrážky
+  $r_text = RegExReplace("(\r*\n)(\*\s\s*.*)(\r*\n)([^*])",      $r_text,  "<ul>\2</ul>\3\4",             "\")
+  $r_text = RegExReplace("^\*\s*(.*)$",                          $r_text,  "<li>\1</li>",                 "\")
+  #
+  $r_text = RegExReplace("(\r*\n)(\d+\s*\.\s+.*)(\r*\n)([^\d])", $r_text,  "<ol>\2</ol>\3\4",             "\")
+  $r_text = RegExReplace("^(\d+)\.\s*(.*)$",                     $r_text,  "<li value='\1'>\2</li>",      "\")
+  #
+  $r_text = RegExReplace("(\r*\n)>(.*)(\r*\n)([^>])",            $r_text,  "<blockquote style='border-left: 2px solid darkgreen; font-size: 14pt; padding-left: 10pt;'>\2</blockquote>", "\")
+  $r_text = RegExReplace("(\r*\n)>\s*(.*)$",                     $r_text,  "<div>\1</div>",               "\")
+
+  # HTML - styly
+  $r_text = RegExReplace("(^|\W)\*\*([^*]*)\*\*($|\W)", $r_text, "\1<b>\2</b>\3", "\")
+  $r_text = RegExReplace("(^|\W)\*([^*]*)\*($|\W)",  $r_text, "\1<i>\2</i>\3", "\")
+  $r_text = RegExReplace("(^|\W)__([^_]*)__($|\W)", $r_text, "\1<b>\2</b>\3", "\")
+  $r_text = RegExReplace("(^|\W)_([^_]*)_($|\W)",  $r_text, "\1<i>\2</i>\3", "\")
+
+  # HTML - odkazy
+  $r_text = RegExReplace("\[([^\]]*)\]\s*\(\s*([^)]*)\s*\)", $r_text, "<a href='\2'>\1</a>", "\") 
+
+  # Konce øádkù
+  $r_text = RegExReplace("<p>(\r*\n)+",  $r_text, "<p>$NL") 
+  $r_text = RegExReplace("(\r*\n)+</p>", $r_text, "</p>") 
+  $r_text = RegExReplace("(\r*\n)+",     $r_text, "<br/>$NL") 
+
+  # Jiné
+  $r_text = RegExReplace("^---+", $r_text, "<hr/>") 
+
   # Smajlíky
   #
   $r_text = Replace("[:)]",  "<img src='http://www.xlii.cz/img/gc/icon_smile.gif' alt=':)' style='border: 0px; vertical-align: middle;'/>", $r_text) 
@@ -838,33 +867,8 @@ BEGINSUB name=markdownToHtml
   $r_text = Replace("[v]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_dissapprove.gif' alt='v' style='border: 0px; vertical-align: middle;'/>", $r_text) 
   $r_text = Replace("[?]",   "<img src='http://www.xlii.cz/img/gc/icon_smile_question.gif' alt='?' style='border: 0px; vertical-align: middle;'/>", $r_text) 
 
-  # HTML - odrážky
-  $r_text = RegExReplace("(\r*\n)(\*\s\s*.*)(\r*\n)([^*])",      $r_text,  "<ul>\2</ul>\3\4",             "\")
-  $r_text = RegExReplace("^\*\s*(.*)$",                          $r_text,  "<li>\1</li>",                 "\")
-  #
-  $r_text = RegExReplace("(\r*\n)(\d+\s*\.\s+.*)(\r*\n)([^\d])", $r_text,  "<ol>\2</ol>\3\4",             "\")
-  $r_text = RegExReplace("^(\d+)\.\s*(.*)$",                     $r_text,  "<li value='\1'>\2</li>",      "\")
-  #
-  $r_text = RegExReplace("(\r*\n)(>.*)(\r*\n)([^>])",            $r_text,  "<blockquote>\2</blockquote>", "\")
-  $r_text = RegExReplace("(\r*\n)>\s*(.*)$",                     $r_text,  "<div>\1</div>",               "\")
-
-  # HTML - styly
-  $r_text = RegExReplace("\*\*(.*)\*\*", $r_text, "<b>\1</b>", "\")
-  $r_text = RegExReplace("\*([^*]*)\*",  $r_text, "<i>\1</i>", "\")
-
-  # HTML - odkazy
-  $r_text = RegExReplace("\[([^\]]*)\]\s*\(\s*([^)]*)\s*\)", $r_text, "<a href='\2'>\1</a>", "\") 
-
-  # Konce øádkù
-  $r_text = RegExReplace("<p>(\r*\n)+",  $r_text, "<p>$NL") 
-  $r_text = RegExReplace("(\r*\n)+</p>", $r_text, "</p>") 
-  $r_text = RegExReplace("(\r*\n)+",     $r_text, "<br/>$NL") 
-
-  # Jiné
-  $r_text = RegExReplace("^---+", $r_text, "<hr/>") 
-
   # Postprocessing
-  $r_text = Replace("<p></p>", "", $r_text) 
+  $r_text = Replace("<p>\s*</p>", "", $r_text) 
 ENDSUB
 
 BEGINSUB name=tidyHtml
@@ -1477,3 +1481,4 @@ Name = btnReload
 
 <enddata>
 #
+
