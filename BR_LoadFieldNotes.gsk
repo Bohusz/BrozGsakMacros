@@ -1,0 +1,474 @@
+#*******************************************
+# MacVersion = 1.00
+# MacDescription = BR Naètení fields notes
+# MacAuthor = Bohusz
+# MacFileName = BR_LoadFieldNotes.gsk
+# MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_LoadFieldNotes.gsk
+#*******************************************
+$UTF8_BOM       = CHR(239)+CHR(187)+CHR(191) # hex: EF BB BF
+$UTF16_BOM      = CHR(255)+CHR(254)          # hex: FF FE
+$LINE_SEPARATOR = CHR(13)+CHR(10)            # CR+LF
+$GCGETCACHES_SETTINGS = "XXX:BR_LoadFieldNotes.SETTINGS"
+$LINES_LIST           = "PARSED_DRAFT_LINES"
+$MISSINGCACHES_LIST   = "MISSING_CACHES"
+$FOUNDTEXTS_LIST      = "FOUND_TEXTS_LIST"
+$DNFTEXTS_LIST        = "NOT_FOUND_TEXTS_LIST"
+
+GOSUB name=initialize
+
+GOSUB name=readForm
+$inputFname = $r_fname
+$gmtOffset  = $r_gmtOffset
+
+$inputContent = GETFILE($inputFname)
+
+$p_data = $inputContent
+GOSUB name=guessEncoding
+$inputEncoding = $r_encoding
+
+$p_encoding = $inputEncoding
+$p_data     = $inputContent
+$p_fname    = $inputFname
+GOSUB name=decodeData
+$decodedContent = $r_data
+##MSGOK msg=$decodedContent
+
+$p_data     = $decodedContent
+$p_listName = $LINES_LIST
+GOSUB name=parseLines
+##$p_listName = $LINES_LIST
+##GOSUB name=showList
+
+$p_listName  = $LINES_LIST
+$p_gmtOffset = $gmtOffset
+GOSUB name=processFieldNotes
+
+##############################################################################################
+
+BEGINSUB name=initialize
+  $x = LIST($FOUNDTEXTS_LIST, "CREATE", ";")
+  $x = LIST($FOUNDTEXTS_LIST, "REPLACE", "Attended;Found it;Webcam Photo Taken")
+  
+  $x = LIST($DNFTEXTS_LIST, "CREATE", ";")
+  $x = LIST($DNFTEXTS_LIST, "REPLACE", "Didn't find it")
+ENDSUB
+
+BEGINSUB name=processFieldNotes
+  # IN $p_listName  - název seznamu, který má být vypsán
+  # IN $p_gmtOffset - èasový posun oproti GMT zónì (ZULU) v celých hodinách
+  #
+  $x01_fieldNotesList = $p_listName
+  $x01_gmtOffset      = $p_gmtOffset
+  
+  GOSUB name=startDatabaseProcessing
+  $x01_filter      = $r_filter
+  $x01_position    = $r_position
+  $x01_transaction = $r_transaction
+
+  $p_inputListName  = $x01_fieldNotesList
+  $p_outputListName = $MISSINGCACHES_LIST
+  $p_gmtOffset      = $x01_gmtOffset
+  GOSUB name=findMissingCaches
+
+  $p_listName = $MISSINGCACHES_LIST
+  GOSUB name=createMissingCaches
+
+  $p_listName  = $x01_fieldNotesList
+  $p_gmtOffset = $x01_gmtOffset
+  GOSUB name=applyFieldNotes
+
+  $p_filter      = $x01_filter
+  $p_position    = $x01_position
+  $p_transaction = $x01_transaction
+  GOSUB name=commenseDatabaseprocessing
+ENDSUB
+
+BEGINSUB name=applyFieldNotes
+  # IN $p_listName - název seznamu, obsahujícího øádky fieldNotes
+  # IN $p_gmtOffset - èasový posun oproti GMT zónì (ZULU) v celých hodinách
+  #
+  $p_forItemSubroutine = "applyFieldNote"
+  GOSUB name=forAllInList
+ENDSUB
+
+BEGINSUB name=applyFieldNote
+  # IN  $p_index     - poøadové èíslo field notes položky
+  # IN  $p_value     - øádek field notes dat
+  # IN  $p_gmtOffset - èasový posun oproti GMT zónì (ZULU) v celých hodinách
+  #
+  $p_line = $p_value
+  GOSUB name=parseFieldNotesLine
+
+  # OUT $r_gcCode
+  # OUT $r_logDate
+  # OUT $r_logTime
+  # OUT $r_logType
+  # OUT $r_logNotes
+  IF NOT(SEEK($r_gcCode))
+    MSGOK msg="Nenalezen záznam pro keš $r_gcCode ($p_index. v poøadí).$LINE_SEPARATOR$LINE_SEPARATOR Zpracování bude ukonèeno."
+  ENDIF
+
+  BEGINCASE
+  CASE LIST($FOUNDTEXTS_LIST, "FIND", $r_logType) <> "0"
+    $d_found         = TRUE
+    $d_foundByMeDate = $r_logDate
+    $d_userData      = $r_logTime
+  CASE LIST($DNFTEXTS_LIST,   "FIND", $r_logType) <> "0"
+    $d_dnf      = TRUE
+    $d_dnfDate  = $r_logDate
+    $d_userData = $r_logTime
+  ENDCASE
+
+  $x08_note  = "[$r_logDate $r_logTime, $r_logType] $r_logNotes"
+  $x08_notes = EXTRACT($d_userNote, "$~", 1)
+  $x08_log   = EXTRACT($d_userNote, "$~", 2)
+  IF ISEMPTY($x08_notes)
+    $x08_notes = $x08_note
+  ELSE
+    $x08_notes = "$x08_notes$LINE_SEPARATOR$x08_note"
+  ENDIF
+  IF ISEMPTY($x08_log)
+    $d_userNote = $x08_notes
+  ELSE
+    $d_userNote = "$x08_notes$~$x08_log"
+  ENDIF
+
+  $d_userFlag = TRUE
+ENDSUB
+
+BEGINSUB name=forAllInList
+  # IN $p_listName - název seznamu, obsahujícího øádky fieldNotes
+  # IN $p_forItemSubroutine
+  #
+  $x02_size = VAL(LIST($p_listName, "COUNT", ""))
+  $i = 1
+  WHILE $i <= $x02_size
+    $p_index = $i
+    $p_value = LIST($p_listName, "ITEM", "$i")
+    GOSUB name=$p_forItemSubroutine
+    $i = $i + 1
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=createMissingCaches
+  # IN $p_listName - název seznamu, obsahujícího GC kódy keší chybìjících v aktuální databázi
+  #
+  $x03_listName = $p_listName
+
+  $x03_codes = LIST($p_listName, "GET", "")
+  $p_codes = REPLACE(";", ",", $x03_codes)
+  GOSUB name=loadCachesFromGeocaching
+
+  $p_listName = $x03_listName
+  GOSUB name=createPlaceholdersForNonExistentCacheCodes
+ENDSUB
+
+BEGINSUB name=createPlaceholdersForNonExistentCacheCodes
+  $x04_size = VAL(LIST($p_listName, "COUNT", ""))
+  $i = 1
+  WHILE $i <= $x04_size
+    $x04_gcCode = LIST($p_listName, "ITEM", "$i")
+    IF NOT(SEEK($x04_gcCode))
+      $p_code = $x04_gcCode
+      GOSUB name=createPlaceholder
+    ENDIF
+    $i = $i + 1
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=createPlaceholder
+  ADDNEW
+  $d_code = $p_code
+  $d_name = "Placeholder for $p_code"
+ENDSUB
+
+BEGINSUB name=loadCachesFromGeocaching
+  $x05_isInTransaction = INTRANSACTION()
+  IF $x05_isInTransaction 
+    TRANSACTION action=END
+  ENDIF
+
+  GCGETCACHES settings=$GCGETCACHES_SETTINGS load=Y showSummary=NO GCCODES=$p_codes
+
+  IF $x05_isInTransaction 
+    TRANSACTION action=BEGIN
+  ENDIF
+ENDSUB
+
+BEGINSUB name=findMissingCaches
+  # IN $p_inputListName  - název seznamu, obsahujícího øádky fieldNotes
+  # IN $p_outputListName - název seznamu, kam budou uloženy GC kódy keší chybìjících v aktuální databázi
+  # IN $p_gmtOffset      - èasový posun oproti GMT zónì (ZULU) v celých hodinách
+  #
+  $x = LIST($p_outputListName, "CREATE", ";")
+  $x05_size = VAL(LIST($p_inputListName, "COUNT", ""))
+  $i = 1
+  WHILE $i <= $x05_size
+    $p_line = LIST($p_inputListName, "ITEM", "$i")
+    GOSUB name=parseFieldNotesLine
+    $x05_gcCode = $r_gcCode
+
+    IF NOT(SEEK($x05_gcCode))
+      $x = LIST($p_outputListName, "ADD", $x05_gcCode)
+    ENDIF
+    $i = $i + 1
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=parseFieldNotesLine
+  # IN  $p_line      - øádek field notes dat
+  # IN  $p_gmtOffset - èasový posun oproti GMT zónì (ZULU) v celých hodinách
+  #
+  # OUT $r_gcCode
+  # OUT $r_logDate
+  # OUT $r_logTime
+  # OUT $r_logType
+  # OUT $r_logNotes
+  #
+  # EXAMPLE:
+  #   GC7F0X3,2018-05-05T11:53Z,Didn't find it,"Blbì zamìøeno a na nejrozumnìjším místì (schodky) ležela ženská."
+  #
+  $x06_list = "xxx_TEMPLIST_xxx"
+  $x = LIST($x06_list, "CREATE", ",")
+  $x = LIST($x06_list, "REPLACE", $p_line)
+  $r_gcCode      = LIST($x06_list, "ITEM", "1")
+  $x06_logDateTime = LIST($x06_list, "ITEM", "2")
+  $r_logType     = LIST($x06_list, "ITEM", "3")
+  $r_logNotes    = LIST($x06_list, "ITEM", "4")
+  $x = LIST($x06_list, "DESTROY", "")
+
+  $p_dateTime  = $x06_logDateTime
+  $p_gmtOffset = $p_gmtOffset
+  GOSUB name=parseDateTime
+  $r_logDate = $r_date
+  $r_logTime = $r_time
+ENDSUB
+
+BEGINSUB name=parseDateTime
+  # IN  $p_dateTime  - datum a èas jako øetìzec ve formátu "YYYY'-'MM'-'DD'T'hh':'mm'Z'", napø. "2018-05-05T11:53Z"
+  # IN  $p_gmtOffset - èasový posun oproti GMT zónì (ZULU) v celých hodinách
+  #
+  # OUT $r_date - datum exprahované z $p_dateTime a pøepoètené pro èasovou zónu $p_gmtOffset
+  # OUT $r_time - èas exprahovaný z $p_dateTime a pøepoètené pro èasovou zónu $p_gmtOffset
+  #
+  #    Format: YYYY'-'MM'-'DD'T'hh':'mm'Z'
+  # Character  |||| | || | |1 1 11 1 11 1
+  #  Position: 1234 5 67 8 90 1 23 4 56 7
+  #
+  $x07_date = STRINGTODATE(SUBSTR($p_dateTime, 1, 4) + SUBSTR($p_dateTime, 6, 2) + SUBSTR($p_dateTime, 9, 2))
+  $x07_time = VAL(SUBSTR($p_dateTime, 12, 2))*60 + VAL(SUBSTR($p_dateTime, 15, 2))
+
+  $x07_newTime = $x07_time + $p_gmtOffset*60
+  BEGINCASE
+  CASE $x07_newTime < 0*60
+    $x07_dayOffset = INT($x07_newTime/(24*60)) - 1
+  CASE $x07_newTime >= 24*60
+    $x07_dayOffset = INT($x07_newTime/(24*60))
+  OTHERWISE
+    $x07_dayOffset = 0
+  ENDCASE
+  
+  $x07_time    = $x07_newTime - $x07_dayOffset*24
+  $x07_hour    = INT($x07_time/60)
+  $x07_minutes = ROUND(FRAC($x07_time/60)*60, 0)
+  $x07_h1      = INT($x07_hour/10)
+  $x07_h2      = ROUND(FRAC($x07_hour/10)*10, 0)
+  $x07_m1      = INT($x07_minutes/10)
+  $x07_m2      = ROUND(FRAC($x07_minutes/10)*10, 0)
+
+  $r_date = $x07_date + $x07_dayOffset
+  $r_time = "$x07_h1$x07_h2:$x07_m1$x07_m2"
+
+  ##PAUSE msg="  input: $p_dateTime [$p_gmtOffset]$LINE_SEPARATOR output: $r_date $r_time"
+ENDSUB
+
+BEGINSUB name=startDatabaseProcessing
+  $r_filter   = SAVEFILTER()
+  $r_position = $d_code
+  $r_transaction = INTRANSACTION()
+
+  IF NOT($r_transaction)
+    TRANSACTION action=BEGIN
+  ENDIF
+  CANCELFILTER
+ENDSUB
+
+BEGINSUB name=commenseDatabaseProcessing
+  IF NOT($p_transaction)
+    TRANSACTION action=END
+  ENDIF
+  IF RESTOREFILTER($p_filter, TRUE) = 0
+    PAUSE msg="No records match your restored filter. Filter has been canceled."
+  ENDIF
+  IF NOT(SEEK($p_position))
+    GOTO position=TOP
+    PAUSE msg="Saved position $p_savedPosition not in current filter. First record selected."
+  ENDIF
+ENDSUB
+
+BEGINSUB name=parseLines
+  # IN $p_data     - øetìzec s øádky oddìlenými sekvence $LINE_SEPARATOR
+  # IN $p_listName - název seznamu, který bude naplnìn jednotlivými øádky
+  #
+  # Výsledný seznam neobsahuje øádky, které jsou prázdné (obsahují jen BLANK znaky)
+  # nebo zaèínají znakem møíž nebo støedník.
+  #
+  $x = LIST($p_listName, "CREATE", $LINE_SEPARATOR)
+  $x = LIST($p_listName, "REPLACE", $p_data)
+  $x07_size = VAL(LIST($p_listName, "COUNT", ""))
+  $i = $x07_size
+  WHILE $i > 0
+    $x = TRIM(LIST($p_listName, "ITEM", "$i"))
+    IF $x = "" OR SUBSTR($x, 1, 1) = "#" OR SUBSTR($x, 1, 1) = ";"
+      $x = LIST($p_listName, "DELETE", "$i")
+    ENDIF
+    $i = $i - 1
+  ENDWHILE
+ENDSUB
+
+BEGINSUB name=showList
+  # IN $p_listName - název seznamu, který má být vypsán
+  #
+  $x07_msg = ""
+  $x07_size = VAL(LIST($p_listName, "COUNT", ""))
+  $i = 1
+  WHILE $i <= $x07_size
+    $x07_msg = "$x07_msg[$i] " + LIST($p_listName, "ITEM", "$i") + $LINE_SEPARATOR
+    $i = $i + 1
+  ENDWHILE
+
+  MSGOK msg=$x07_msg
+ENDSUB
+
+BEGINSUB name=decodeData
+  BEGINCASE
+  CASE $p_encoding = "UTF8_BOM"
+    $r_data = UTF8(SUBSTR($p_data, LEN($UTF8_BOM)+1, 0), "d")
+    EXITSUB
+  CASE $p_encoding = "UTF8"
+    $r_data = UTF8($p_data, "d")
+    EXITSUB
+  CASE $p_encoding = "UTF16_BOM"
+    $r_data = UTF16(SUBSTR($p_data, LEN($UTF16_BOM)+1, 0), "d")
+    EXITSUB
+  CASE $p_encoding = "UTF16"
+    $r_data = UTF16($p_data, "d")
+    EXITSUB
+  OTHERWISE
+    $msg = "Nepodporované kódování " + QUOTE(p_encoding) + " souboru " + QUOTE($p_fname) + "."
+    MSGOK msg=$msg caption="Nepodporované kódování"
+  ENDCASE
+ENDSUB
+
+BEGINSUB name=guessEncoding
+  IF SUBSTR($p_data, 1, LEN($UTF8_BOM)) = $UTF8_BOM
+    $r_encoding = "UTF8_BOM"
+    EXITSUB
+  ENDIF
+  IF SUBSTR($p_data, 1, LEN($UTF16_BOM)) = $UTF16_BOM
+    $r_encoding = "UTF16_BOM"
+    EXITSUB
+  ENDIF
+  $r_encoding = "UNKNOW"
+ENDSUB
+
+BEGINSUB name=readForm
+  # OUT $r_fname     - plnì kvalifikované jméno souboru s field notes
+  # OUT $r_gmtOffset - èasový posun oproti GMT zónì (ZULU) v celých hodinách
+  #
+  $FileName = ""
+  $TimeZone = "1"
+  MACSETTINGS type=R vars=FileName,TimeZone fileCheck=N
+
+  WHILE TRUE
+    $result = FORM($SelectFileForm, "")
+    BEGINCASE
+    CASE $result = "OkButton"
+        IF TRIM($FileName) = ""
+          SHOWSTATUS msg="Nebyl vybrán žádný soubor..." display=ON
+          DELAY ms=2500
+          SHOWSTATUS display=OFF
+          BREAK
+        ENDIF
+        $r_fname     = $FileName
+        $r_gmtOffset = VAL($TimeZone)
+
+        MACSETTINGS type=S vars=FileName,TimeZone
+        EXITSUB
+    CASE $result = "CancelButton" OR $result = "DelayExit" OR $result = "SystemExit"
+      RETURN
+    ENDCASE
+  ENDWHILE
+ENDSUB
+
+<Data> VarName=$SelectFileForm
+#********************************************************************
+# Form generated by GSAK form designer on ne 13-kvì-2018 10:27:59
+#********************************************************************
+
+Name = SelectFileForm
+  Type = Form
+  Caption = Vyberte field notes soubor
+  Height = 140
+  Width = 500
+
+Name = FileNameLabel
+  Type = Label
+  Height = 17
+  Left = 8
+  Top = 16
+  Width = 42
+  Caption = Soubor
+
+Name = FileName
+  Type = File
+  Height = 25
+  Left = 80
+  Top = 8
+  Width = 401
+  Taborder = 10
+
+Name = TimeZoneLabel
+  Type = Label
+  Height = 17
+  Left = 8
+  Top = 48
+  Width = 70
+  Caption = Èasová zóna
+
+Name = TimeZone
+  Type = Edit
+  Height = 25
+  Left = 80
+  Top = 40
+  Width = 49
+  Taborder = 11
+
+Name = TimeZoneExplanationLabel
+  Type = Label
+  Height = 17
+  Left = 136
+  Top = 48
+  Width = 149
+  Caption = (posun proti GMT v hodinách)
+
+Name = OkButton
+  Type = Button
+  Enter = Yes
+  Height = 25
+  Left = 328
+  Top = 72
+  Width = 75
+  Taborder = 12
+  Caption = Ok
+
+Name = CancelButton
+  Type = Button
+  Height = 25
+  Left = 408
+  Top = 72
+  Width = 75
+  Taborder = 13
+  Caption = Storno
+
+<enddata>
