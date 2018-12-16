@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 2.11
+# MacVersion = 2.12
 # MacDescription = Tabulka keší + my logs do blogger.com
 # MacAuthor = Bohusz
 # MacFileName = BR_HtmlLogBase2.gsk
@@ -43,6 +43,10 @@
 #    - Oprava rozmìrù tabulky, zdá se, že se to zaèalo chápat jinak.
 # 2.11 (28.12.2017)
 #    - Drobné zmìny ve formátování Markdown, hlavnì citace a podpora podtržítek vedle hvìzdièek.
+# 2.12 (16.12.2018)
+#    - Naètení všech typù logù pro vybrané keše.
+#      (Ještì to není dokonalé, pøi výbìru podle data se najdou všechny logy pro keše logované v tomto rozsahu.)
+#    - Oznaèení jiných typù logù v mini tabulce kurzívou.
 #*******************************************
 
 # inicializace
@@ -141,6 +145,8 @@ $x = seek($currentPosition)
 # výsledek
 CLIP DATA=$html
 
+#DELAY ms=20000
+
 ##################################################################################################################
 ##                                                                                   P Ø Í P R A V A   D A T    ##
 ##################################################################################################################
@@ -170,7 +176,7 @@ BEGINSUB name=lookupData
           ENDIF
         ENDIF
 
-        IF NOT($v_processed)
+#        IF NOT($v_processed)
           $v_time = regexsub("(\d{1,2}:\d{2})", $d_lText, 1, 1)
           IF $v_time = ""
             # Nìkdy je keš v GSAK oznaèena jako DNF, ale není k ní buï žádný log nebo je jiného typu (typicky 'Needs maintenance') a bez èasu 'nenálezu'.
@@ -183,10 +189,11 @@ BEGINSUB name=lookupData
           GOSUB name=normalizeLogType
           $v_data = dateToString($d_lDate) + " $v_time,$r_type,$d_lParent,$d_lLogid"
           $g_maxItems = $g_maxItems + 1
-          SHOWSTATUS msg="[FETCH] #$g_maxItems: $d_code, LOGGED"
+          $p_msg = "[FETCH] #$g_maxItems: $d_code, LOGGED | $v_data"
+          GOSUB name=showStatus
           array($ITEMS, $g_maxItems) = $v_data
           $v_processed = TRUE
-        ENDIF
+#       ENDIF
       ENDIF
       GOTO position=NEXT
     ENDWHILE
@@ -209,7 +216,8 @@ BEGINSUB name=lookupData
         ENDIF
         $v_data = dateToString($v_date) + " $v_time,$v_type,$d_code,"
         $g_maxItems = $g_maxItems + 1
-        SHOWSTATUS msg="[FETCH] #$g_maxItems: $d_code, NO LOG"
+        $p_msg = "[FETCH] #$g_maxItems: $d_code, NO LOG"
+        GOSUB name=showStatus
         array($ITEMS, $g_maxItems) = $v_data
       ENDIF
     ENDIF
@@ -222,6 +230,8 @@ BEGINSUB name=lookupData
   $p_count = $g_maxItems
   GOSUB name=shrinkArray
   array($ITEMS, -2) = "ASI"
+
+  GOSUB name=showStatus_emptyLine
 ENDSUB
 
 ##################################################################################################################
@@ -245,11 +255,13 @@ BEGINSUB name=calculateStats
   $v_index = 1
   WHILE $v_index <= $g_maxItems
     $v_item = array($ITEMS, $v_index)
-    SHOWSTATUS msg="[STATS] #$v_index: $v_item"
+    $p_msg = "[STATS] #$v_index: $v_item"
+    GOSUB name=showStatus
     $v_date  = stringToDate(regexsub($LOGREC_RE, $v_item, 1, $LOGREC_DATE_GRP))
     $v_lgTyp = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_TYPE_GRP)
     $v_cache = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_CACHE_GRP)
-    SHOWSTATUS msg="[STATS] #$v_index: $v_cache, $v_lgTyp"
+    $p_msg = "[STATS] #$v_index: $v_cache, $v_lgTyp"
+    GOSUB name=showStatus
 
     IF NOT(seek($v_cache))
       $v_msg = "Uh, oh! Keš $v_cache na pozici $v_index seznamu nebyla nalezena v databázi. To pøece není možné!"
@@ -276,6 +288,8 @@ BEGINSUB name=calculateStats
 
     $v_index = $v_index + 1
   ENDWHILE
+
+  GOSUB name=showStatus_emptyLine
 ENDSUB
 
 BEGINSUB name=htmlStats
@@ -354,7 +368,8 @@ BEGINSUB name=processTable
     $v_lgTyp = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_TYPE_GRP)
     $v_cache = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_CACHE_GRP)
     $v_logid = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_LOGID_GRP)
-    SHOWSTATUS msg="[TABLE] #$v_index: $v_cache, $v_date $v_time, $v_lgTyp, $logid"
+    $p_msg = "[TABLE] #$v_index: $v_cache, $v_date $v_time, $v_lgTyp, $v_logid"
+    GOSUB name=showStatus
 
     $p_date = $v_date
     $p_time = $v_time
@@ -371,6 +386,8 @@ BEGINSUB name=processTable
   ENDWHILE
 
   $r_table = "$r_table</table>$NL"
+
+  GOSUB name=showStatus_emptyLine
 ENDSUB
 
 BEGINSUB name=processTableItem
@@ -428,7 +445,10 @@ BEGINSUB name=htmlTableItem
   # název keše (autor)
   $r_item = "$r_item<td>"
   GOSUB name=itemStyle_BEGIN
-  $r_item = "$r_item<b>$d_Name</b> ($d_PlacedBy)"
+  GOSUB name=boldIfFoundOrNotFound_BEGIN
+  $r_item = "$r_item$d_Name"
+  GOSUB name=boldIfFoundOrNotFound_END
+  $r_item = "$r_item ($d_PlacedBy)"
   GOSUB name=itemStyle_END
   $r_item = "$r_item</td>"
 
@@ -436,14 +456,34 @@ BEGINSUB name=htmlTableItem
 ENDSUB
 
 BEGINSUB name=itemStyle_BEGIN
-  IF $d_DNF
+  BEGINCASE
+  CASE $p_lgTyp = "DNF"
     $r_item = "$r_item<i><font color='#808080'>"
-  ENDIF
+  CASE $p_lgTyp = "ATTENDED" OR $p_lgTyp = "FOUND" OR $p_lgTyp = "PHOTO_TAKEN"
+  OTHERWISE
+    $r_item = "$r_item<i>"
+  ENDCASE
 ENDSUB
 
 BEGINSUB name=itemStyle_END
-  IF $d_DNF
+  BEGINCASE
+  CASE $p_lgTyp = "DNF"
     $r_item = "$r_item</font></i>"
+  CASE $p_lgTyp = "ATTENDED" OR $p_lgTyp = "FOUND" OR $p_lgTyp = "PHOTO_TAKEN"
+  OTHERWISE
+    $r_item = "$r_item</i>"
+  ENDCASE
+ENDSUB
+
+BEGINSUB name=boldIfFoundOrNotFound_BEGIN
+  IF $p_lgTyp = "DNF" OR $p_lgTyp = "ATTENDED" OR $p_lgTyp = "FOUND" OR $p_lgTyp = "PHOTO_TAKEN"
+    $r_item = "$r_item<b>"
+  ENDIF
+ENDSUB
+
+BEGINSUB name=boldIfFoundOrNotFound_END
+  IF $p_lgTyp = "DNF" OR $p_lgTyp = "ATTENDED" OR $p_lgTyp = "FOUND" OR $p_lgTyp = "PHOTO_TAKEN"
+    $r_item = "$r_item</b>"
   ENDIF
 ENDSUB
 
@@ -463,7 +503,8 @@ BEGINSUB name=processLogs
     $v_lgTyp = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_TYPE_GRP)
     $v_cache = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_CACHE_GRP)
     $v_logid = regexsub($LOGREC_RE, $v_item, 1, $LOGREC_LOGID_GRP)
-    SHOWSTATUS msg="[LOGS] #$v_index: $v_cache, $v_date $v_time, $v_lgTyp, $logid"
+    $p_msg = "[LOGS] #$v_index: $v_cache, $v_date $v_time, $v_lgTyp, $v_logid"
+    GOSUB name=showStatus
 
     # log nemusí vždy existovat - možná ještì nebyl naèten, pak generujeme jen z atributù záznamu keše v databázi
     IF NOT(isempty($v_logid))
@@ -493,6 +534,8 @@ BEGINSUB name=processLogs
   ENDWHILE
 
   TABLE active=CACHES
+
+  GOSUB name=showStatus_emptyLine
 ENDSUB
 
 # htmlLog: Pøevede aktuálnì vybraný log do HTML.
@@ -992,7 +1035,8 @@ BEGINSUB name=loadBlogData
         $v_cacheName = SQLGET("name")
         $v_logDate = SQLTODATE(SQLGET("lDate"))
 
-        SHOWSTATUS title="Vyhledání názvù blogù" msg="#$v_count $v_cacheCode: $v_url ($v_logDate)" width=500
+        SHOWSTATUS title="Vyhledání názvù blogù" msg="#$v_count $v_cacheCode: $v_url ($v_logDate)" width=500 height=500 mtyp=MULTI
+        GOSUB name=showStatus
 
         $v_index = list($BLOGS, "regex", ".*,$v_url")
         IF $v_index = "0" OR $v_index = ""
@@ -1432,6 +1476,15 @@ BEGINSUB name=fillList
   $v_x = removeVar("v_to")
 ENDSUB
 
+BEGINSUB name=showStatus
+  SHOWSTATUS msg=$p_msg width=500 height=500 mtype=MULTI
+ENDSUB
+
+BEGINSUB name=showStatus_emptyLine
+  $p_msg = ""
+  GOSUB name=showStatus
+ENDSUB
+
 <Data> VarName=$SeznamBlogu
 #********************************************************************
 # Form generated by GSAK form designer on ne 27-XI-2011 22:33:31
@@ -1481,4 +1534,3 @@ Name = btnReload
 
 <enddata>
 #
-
