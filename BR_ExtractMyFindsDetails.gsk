@@ -1,66 +1,229 @@
 #*******************************************
-# MacVersion = 1.0
+# MacVersion = 1.03
 # MacDescription = Aktualizace údajù o nálezech podle logu
 # MacAuthor = roztocil
 # MacFileName = BR_ExtractMyFindsDetails.gsk
 # MacUrl =
 #*******************************************
+# 2017-05-28, 1.02 - vyhledávání pøes SQLLITE
+# 2018-10-23, 1.03 - možnost zpracování oznaèených (userflad) záznamù
+#                  - možnost pøepsání existujících záznamù
+#--------------------------------------------------------------------------
 VSUB status=ON
 
-$BLOG_FIELD = "MyBlogName"
-$NL = CHR(13)+CHR(10)
+GOSUB name=ask
 
-IF IsEmpty(CustomConfig("Get", $BLOG_FIELD))
-   $err = CustomConfig("Add", "$BLOG_FIELD,string,Global,,,Standard")
+$MODE           = $r_mode
+$REWRITE        = $r_rewrite
+$BLOGS_SITE     = "http://kacer-bob.blogspot."
+$BLOGPAGE_FIELD = "MyBlogName"
+$BLOGPATH_FIELD = "MyBlogPath"
+$LOG_OWNER      = "Bohusz"
+$NL             = CHR(13)+CHR(10)
+
+IF IsEmpty(CustomConfig("Get", $BLOGPAGE_FIELD))
+   $err = CustomConfig("Add", "$BLOGPAGE_FIELD,string,Global,,,Standard")
+   IF NOT(IsEmpty($err))
+      CANCEL msg=$err
+   ENDIF
+ENDIF
+IF IsEmpty(CustomConfig("Get", $BLOGPATH_FIELD))
+   $err = CustomConfig("Add", "$BLOGPATH_FIELD,string,Global,,,Standard")
    IF NOT(IsEmpty($err))
       CANCEL msg=$err
    ENDIF
 ENDIF
 
+$TEMPLATE = "SELECT ###"
+$TEMPLATE = $TEMPLATE + "  FROM LogMemo m"
+$TEMPLATE = $TEMPLATE + "  JOIN Logs    l ON l.lParent = m.lParent AND l.lLogId = m.lLogId"
+$TEMPLATE = $TEMPLATE + "  JOIN Caches  c ON c.Code    = l.lParent"
+$TEMPLATE = $TEMPLATE + "  JOIN Custom  k ON k.cCode   = c.Code"
+$TEMPLATE = $TEMPLATE + " WHERE l.lType IN ('Found it', 'Attended', 'Webcam Photo taken')"
+$TEMPLATE = $TEMPLATE + "   AND l.lBy = '$LOG_OWNER'"
+$TEMPLATE = $TEMPLATE + "   AND m.ltext LIKE '%$BLOGS_SITE%'"
+BEGINCASE
+  CASE $MODE = "ALL_EMPTY"
+       $TEMPLATE = $TEMPLATE + "   AND COALESCE(k.$BLOGPAGE_FIELD, '') = ''"
+  CASE $MODE = "ALL_SELECTED"
+       $TEMPLATE = $TEMPLATE + "   AND c.UserFlag = 1"
+ENDCASE
+
+$COUNT = REPLACE("###", "COUNT(*) count", $TEMPLATE)
+$QUERY = REPLACE("###", "c.Code, c.Name, l.lType, l.lBy, l.lDate||'' date, m.lText, l.lIsowner", $TEMPLATE) + " ORDER BY date"
+
 TRANSACTION action=BEGIN
 
-GOTO position=TOP
-WHILE NOT($_EOL)
-   $logFound = false
-   TABLE active=LOGS scope=PARENT
-   GOTO position=TOP
-   WHILE NOT($_EOL)
-      #MSGOK msg=" d_lIsOwner: $d_lIsOwner $NL d_lType: $d_lType"
-      IF $d_lIsOwner AND ($d_lType = "Attended" OR $d_lType = "Found it" OR $d_lType = "Webcan Photo Taken")
-         $logFound = true
-         $myDate  = $d_lDate
-         $myTime  = RegExSub("(~?\d?\d:\d\d)", $d_lText, 1, 1)
-         $myBlog  = RegExSub("http://kacer-bob.blogspot.cz/\d+/\d+/([-a-z0-9]+).html", $d_lText, 1, 1)
-         $myOrder = RegExSub("#\s*(\d+)", $d_lText, 1, 1)
-      ENDIF
+GOSUB name=prepareView
 
-      GOTO position=NEXT
-   ENDWHILE
-   TABLE active=CACHES
+SHOWSTATUS msg="Poèítám keše..." width=400 height=250 mtype=MULTI display=ON title="Aktualizace údajù o nálezech podle logu"
+GOSUB name=CountRecords
+$i = 0
 
-   #MSGOK msg=" logFound: $logFound$NL myOrder: $myOrder$NL myDate:  $myDate$NL myTime:  $myTime$NL myBlob:  $myBlog"
-   IF $logFound
-      IF NOT($d_Found)
+$sqlcode = SQLITE("sql", $QUERY, "sqlget=0")
+# MSGOK msg="$QUERY" caption="SQLCODE: $sqlcode, SQLEOL0: $_SqlEol0, COUNT: $count"
+WHILE NOT($_SqlEol0)
+   $qCode = SQLGET("code")
+   $qName = SQLGET("name")
+   $qDate = SQLTODATE(SQLGET("date"))
+   $qType = SQLGET("lType")
+   $qText = SQLGET("lText")
+   $i = $i + 1
+
+   SHOWSTATUS msg="($i / $count) $qCode $qName" width=400 height=250 mtype=MULTI display=ON title="Aktualizace údajù o nálezech podle logu"
+   $myDate  = $qDate
+   $myTime  = RegExSub("(~?\d?\d:\d\d)", $qText, 1, 1)
+   $myBlog  = RegExSub("$BLOGS_SITE\w+/\d+/\d+/([-a-z0-9]+)(\.html)?\W", $qText, 1, 1)
+   $myPage  = RegExSub("$BLOGS_SITE\w+/p/([-a-z0-9]+)(\.html)?\W", $qText, 1, 1)
+   $myPath  = RegExSub("$BLOGS_SITE\w+/((\d+/\d+|p)/[-a-z0-9]+(\.html)?)\W", $qText, 1, 1)
+   $myOrder = RegExSub("#\s*(\d+)", $qText, 1, 1)
+
+   IF NOT(SEEK($qCode))
+      MSGOK msg="Cannot happen: Cannot seek to $qCode"
+   ELSE
+
+      # MSGOK msg=" logType: $qType$NL myOrder: $myOrder$NL myDate:  $myDate$NL myTime:  $myTime$NL myBlog:  $myBlog$NL myPage:  $myPage$NL myPath:  $myPath$NL$NL$qText"
+      IF NOT($d_Found) OR $REWRITE
          $d_Found = true
          $d_FoundByMeDate = $myDate
       ENDIF
-      IF IsEmpty($d_UserData)
+      IF NOT(IsEmpty($myTime)) AND (IsEmpty($d_UserData) OR $REWRITE)
          $d_UserData = $myTime
       ENDIF
-      IF IsEmpty(CustomGet($BLOG_FIELD))
-         $err = CustomPut($BLOG_FIELD, $myBlog)
+      IF NOT(IsEmpty($myBlog)) AND (IsEmpty(CustomGet($BLOGPAGE_FIELD)) OR $REWRITE)
+	 BEGINCASE
+            CASE $myPage = "ge"
+                 $myBlog = "[GEOPIVO]"
+            CASE $myPage = "nerazeno" OR $myPage = "nerazene" OR $myBlog = "nezarazeno" OR $myBlog = "nezarazene"
+                 $myBlog = "[NEZAØAZENÉ]"
+            CASE NOT(IsEmpty($myPage))
+                 $myBlog = "[" + UPPER($myPage) + "]"
+         ENDCASE
+         $err = CustomPut($BLOGPAGE_FIELD, $myBlog)
          IF NOT(IsEmpty($err))
             CANCEL msg=$err
          ENDIF
       ENDIF
-      IF $d_UserSort <= 0
+      IF NOT(IsEmpty($myPage)) AND (IsEmpty(CustomGet($BLOGPATH_FIELD)) OR $REWRITE)
+         $err = CustomPut($BLOGPATH_FIELD, $myPath)
+         IF NOT(IsEmpty($err))
+            CANCEL msg=$err
+         ENDIF
+      ENDIF
+      IF NOT(IsEmpty($myOrder)) AND ($d_UserSort <= 0 OR $REWRITE)
          $d_UserSort = Val($myOrder)
       ENDIF
    ENDIF
 
-   GOTO position=NEXT
+   SQLNEXT
 ENDWHILE
+SQLGETCLOSE
 
+SHOWSTATUS msg="" display=OFF
+GOSUB name=restoreView
 TRANSACTION action=END
 
+BEGINSUB name=CountRecords
+   $sqlcode = SQLITE("sql", $COUNT, "sqlget=0")
+   $count   = SQLGET("count")
+   SQLGETCLOSE
+ENDSUB
 
+BEGINSUB name=saveView
+   $SAVED_filter   = SAVEFILTER()
+   $SAVED_position = $d_Code
+ENDSUB
+
+BEGINSUB name=prepareView
+   $SAVED_filter   = SAVEFILTER()
+   $SAVED_position = $d_Code
+   CANCELFILTER
+ENDSUB
+
+BEGINSUB name=restoreView
+   IF RESTOREFILTER($SAVED_filter, TRUE) = 0
+      IF SEEK($SAVED_position)
+         $x = REMOVEVAR("SAVED_filter")
+         $x = REMOVEVAR("SAVED_position")
+      ENDIF
+   ENDIF
+ENDSUB
+
+BEGINSUB name=ask
+  $rbAllEmpty = TRUE
+  $exit = FORM($form, "")
+  BEGINCASE
+    CASE $exit = "btnOk" OR $exit = "DelayExit"
+         BEGINCASE
+            CASE $rbAllEmpty
+                 $r_mode = "ALL_EMPTY"
+            OTHERWISE
+                 $r_mode = "ALL_SELECTED"
+         ENDCASE
+         $r_rewrite = $cbRewrite
+    CASE $exit = "btnCancel" OR $exit = "SystemExit"
+         RETURN
+  ENDCASE
+ENDSUB
+
+<Data> VarName=$form
+#********************************************************************
+# Form generated by GSAK form designer on út 23-øíj-2018 21:44:43
+#********************************************************************
+
+Name = Form1
+  Type = Form
+  Caption = Extrakce dat z textu logu
+  Height = 202
+  Width = 463
+  Delay = 10
+
+Name = rbAllEmpty
+  Type = Radiobutton
+  Height = 20
+  Left = 16
+  Top = 16
+  Width = 425
+  Taborder = 10
+  Caption = Všechny s nevyplnìným názvem blogu
+
+Name = rbAllVisible
+  Type = Radiobutton
+  Height = 20
+  Left = 16
+  Top = 40
+  Width = 425
+  Taborder = 20
+  Caption = Všechny oznaèené (zaškrtnuté ve sloupeèku s panáèkem)
+
+Name = cbRewrite
+  Type = Checkbox
+  Height = 20
+  Left = 16
+  Top = 80
+  Width = 427
+  Taborder = 30
+  Caption = Pøepsat již existující hodnoty (normálnì se vyplòují jen dosud nevyplnìné)
+
+Name = btnOk
+  Type = Button
+  Enabled = Yes
+  Enter = Yes
+  Height = 25
+  Left = 136
+  Top = 128
+  Width = 75
+  Taborder = 40
+  Caption = OK
+
+Name = btnCancel
+  Type = Button
+  Escape = Yes
+  Height = 25
+  Left = 224
+  Top = 128
+  Width = 75
+  Taborder = 50
+  Caption = Storno
+
+<enddata>
