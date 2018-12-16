@@ -1,0 +1,32 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Nové makro
+# MacAuthor = roztocil
+# MacFileName = Nové makro.gsk
+# MacUrl =
+#*******************************************
+$data = GcApi("SearchForGeocaches", $QUERY)
+
+IF $_GcApiError
+  MSGOK msg=$data caption="*** ERROR ***"
+ELSE
+  $data = SQLITE("sql", "SELECT * FROM GcApi", "Headings=Y")
+  $status = SQLTOHTML($data,"Users that favorited cache - $d_code","Y")
+ENDIF
+
+<DATA> Varname=$QUERY
+<SearchForGeocachesRequest xmlns="http://www.geocaching.com/Geocaching.Live/data">
+  <AccessToken>{ACCESSTOKEN}</AccessToken>
+  <IsLite>true</IsLite>
+  <!-- 50 caches per page maximum -->
+  <MaxPerPage>50</MaxPerPage>
+  <!-- 30 logs maximum -->
+  <GeocacheLogCount>30</GeocacheLogCount>
+  <!-- 30 logs maximum -->
+  <TrackableLogCount>30</TrackableLogCount>
+  <FoundByUser>
+    <UserName xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">bohusz</UserName>
+  </FoundByUser>
+  <IsSummaryOnly>true</IsSummaryOnly>
+</SearchForGeocachesRequest>
+<ENDDATA>
