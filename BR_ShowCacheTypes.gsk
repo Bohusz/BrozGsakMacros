@@ -1,0 +1,12 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = BR_ShowCacheTypes
+# MacAuthor = Bohuslav
+# MacFileName = Nové makro.gsk
+# MacUrl = BR_ShowCacheTypes
+#*******************************************
+$CacheTypes = CacheType("all1")
+MsgOk Msg=$CacheTypes
+$CacheTypes = CacheType("all")
+MsgOk Msg=$CacheTypes
+ 
