@@ -1,17 +1,23 @@
 #*******************************************
-# MacVersion = 1.2
+# MacVersion = 1.3
 # MacDescription = BR_UpdatePublished
 # MacAuthor = roztocil
 # MacFileName = BR_UpdatePublished.gsk
 # MacUrl =
 #*******************************************
+# 2018-11-04, 1.3 - pokud políèka (Published, ArchivedOn) dosud neexistují, jsou vytvoøena.
+#                 - použití "konstant" s názvy políèek místo literálù rozptýlených po kódu
 # 2015-12-31, 1.2 - podpora pro datum archivace
 #                 - oprava: datum nálezu pøevádìno na interní formát
 #                 - oprava: WHILE místo IF, který zbyl z doby, kdy šlo jen o datum publikace
 ###########################################################################
-
-TRANSACTION action=BEGIN
-SPEEDMODE status=on
+#
+# KONSTANTY
+#
+# Custom Fields:
+#
+$PUBLISHED_DATE = "Published"
+$ARCHIVED_DATE  = "ArchivedOn"
 
 # Log types:
 #
@@ -33,13 +39,26 @@ $PHOTO_TAKEN_LOG = "Webcam Photo Taken"
 $WILL_ATTEND_LOG = "Will Attend"
 $WRITE_NOTE_LOG = "Write note"
 
+# Inicializace.
+#
+$p_customField = $PUBLISHED_DATE
+GOSUB name=prepareCustomField
+
+$p_customField = $ARCHIVED_DATE
+GOSUB name=prepareCustomField
+
+# Processing.
+#
+TRANSACTION action=BEGIN
+SPEEDMODE status=on
+
 $i = 0
 GOTO position=TOP
 WHILE NOT($_EOL)
   $i = $i + 1
   SHOWSTATUS msg="$i/$_Count $d_code - $d_name"
-  $v_published = CustomGet("Published")
-  $v_archived  = CustomGet("ArchivedOn")
+  $v_published = CustomGet($PUBLISHED_DATE)
+  $v_archived  = CustomGet($ARCHIVED_DATE)
 
 
   #IF ($v_published = "")
@@ -48,14 +67,15 @@ WHILE NOT($_EOL)
       $v_logType = SQLGET("ltype")
       $v_logDate = SQLGET("lDate")
       $r = ""
+      #MSGOK msg="[$d_code] $v_logType: $v_logDate"
 
       BEGINCASE
 
       CASE $v_logType = $PUBLISH_LOG
-          $r = CustomPut("Published", $v_logDate)
+          $r = CustomPut($PUBLISHED_DATE, $v_logDate)
 
       CASE $v_logType = $ARCHIVE_LOG
-          $r = CustomPut("ArchivedOn", $v_logDate)
+          $r = CustomPut($ARCHIVED_DATE, $v_logDate)
 
       CASE $v_logType = $FOUND_LOG
           IF ($d_FoundByMeDate = [00000000])
@@ -80,3 +100,11 @@ ENDWHILE
 SPEEDMODE status=off
 TRANSACTION action=END
 GOTO position=TOP
+
+BEGINSUB name=prepareCustomField
+  # $p_customField - jméno políèka
+  #
+  IF CustomConfig("Get", $p_customField) = ""
+    $x = CustomConfig("Add", "$p_customField,date,Global")
+  ENDIF
+ENDSUB
