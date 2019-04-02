@@ -1,10 +1,12 @@
 #*******************************************
-# MacVersion = 1.00
+# MacVersion = 1.01
 # MacDescription = BR Naètení fields notes
 # MacAuthor = Bohusz
 # MacFileName = BR_LoadFieldNotes.gsk
 # MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_LoadFieldNotes.gsk
 #*******************************************
+# 2018-06-03 1.01 - rozpoznání UTF16 bez BOM
+#
 $UTF8_BOM       = CHR(239)+CHR(187)+CHR(191) # hex: EF BB BF
 $UTF16_BOM      = CHR(255)+CHR(254)          # hex: FF FE
 $LINE_SEPARATOR = CHR(13)+CHR(10)            # CR+LF
@@ -21,6 +23,10 @@ $inputFname = $r_fname
 $gmtOffset  = $r_gmtOffset
 
 $inputContent = GETFILE($inputFname)
+IF LEFT($inputContent, 7) = "*Error*"
+  MSGOK msg=$inputContent
+  RETURN
+ENDIF
 
 $p_data = $inputContent
 GOSUB name=guessEncoding
@@ -355,21 +361,62 @@ BEGINSUB name=decodeData
     $r_data = UTF16($p_data, "d")
     EXITSUB
   OTHERWISE
-    $msg = "Nepodporované kódování " + QUOTE(p_encoding) + " souboru " + QUOTE($p_fname) + "."
+    $msg = "Nepodporované kódování " + QUOTE($p_encoding) + " souboru " + QUOTE($p_fname) + "."
     MSGOK msg=$msg caption="Nepodporované kódování"
   ENDCASE
 ENDSUB
 
 BEGINSUB name=guessEncoding
+  ##$msg = SUBSTR($p_data, 1, 30)+$LINE_SEPARATOR+"data: "+NUMTOSTR(ASC(SUBSTR($p_data, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($p_data, 2, 1)))+" "+NUMTOSTR(ASC(SUBSTR($p_data, 3, 1)))+$LINE_SEPARATOR+"UTF8: "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 2, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 3, 1)))+$LINE_SEPARATOR+"UTF16: "+NUMTOSTR(ASC(SUBSTR($UTF16_BOM, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF16_BOM, 2, 1)))
+  ##MSGOK msg=$msg
   IF SUBSTR($p_data, 1, LEN($UTF8_BOM)) = $UTF8_BOM
     $r_encoding = "UTF8_BOM"
     EXITSUB
   ENDIF
+
   IF SUBSTR($p_data, 1, LEN($UTF16_BOM)) = $UTF16_BOM
     $r_encoding = "UTF16_BOM"
     EXITSUB
   ENDIF
-  $r_encoding = "UNKNOW"
+
+  GOSUB name=isUtf16WithNoBom
+  IF $r
+    $r_encoding = "UTF16"
+    EXITSUB
+  ENDIF
+
+  $r_encoding = "UNKNOWN"
+ENDSUB
+
+BEGINSUB name=isUtf16WithNoBom
+  $i = 0
+  $x_nuls = 0
+  $x_commas = 0
+  WHILE TRUE
+    $i = $i + 1
+    IF $i > LEN($p_data) OR $i > 200
+      $r = FALSE
+      EXITSUB
+    ENDIF
+
+    $ch = SUBSTR($p_data, $i, 1)
+    IF $i MOD 2 = 1
+      # LICHÉ POZICE
+      IF $ch = ","
+        $x_commas = $x_commas + 1
+      ENDIF
+    ELSE
+      # SUDÉ POZICE
+      IF $ch = CHR(0)
+        $x_nuls = $x_nuls + 1
+      ENDIF
+    ENDIF
+
+    IF $x_commas = 3
+      $r = $x_nuls = ($i DIV 2)
+      EXITSUB
+    ENDIF
+  ENDWHILE
 ENDSUB
 
 BEGINSUB name=readForm
