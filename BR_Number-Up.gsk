@@ -1,0 +1,23 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = BR - Èíslovat keše od vybrané nahoru
+# MacAuthor = b_roz
+# MacFileName = BR_Number-Up.gsk
+# MacUrl =
+#*******************************************
+#
+TRANSACTION action=BEGIN
+$current = $d_Code
+$i = $d_UserSort
+
+GOTO position=PREVIOUS
+WHILE NOT($_EOL)
+  IF $d_Found
+    $i = $i + 1
+    $d_UserSort = $i
+  ENDIF
+  GOTO position=PREVIOUS
+ENDWHILE
+
+$x = SEEK($current)
+TRANSACTION action=END
