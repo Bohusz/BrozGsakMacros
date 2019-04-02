@@ -1,11 +1,13 @@
 #*******************************************
-# MacVersion = 1.1
+# MacVersion = 1.2
 # MacDescription = USort Order Number Check
 # MacAuthor = Bob
 # MacFileName = BR_USortOrderNumberRepair.gsk
 # MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_USortOrderNumberCheck.gsk
 #*******************************************
-PAUSE msg="Aktuální oznaèení bude zrušeno a nahrazeno oznaèením bodù s potenciálnì chybným èíslováním" caption="Vyhledání chyb v èíslování"
+# 2017-07-08 1.2 - Zlepšení srozumitelnosti dotazu na zaèátku.
+#------------------------------------------------------------------------------------------------------------------
+PAUSE msg="Aktuální oznaèení (zaškrtnutí) bude zrušeno a nahrazeno oznaèením bodù s potenciálnì chybným èíslováním."
 
 $savedFilter = SAVEFILTER()
 MFILTER where="found AND cacheType NOT IN ('G', 'O', 'Y')"
