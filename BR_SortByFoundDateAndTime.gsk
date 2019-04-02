@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 1.04
+# MacVersion = 1.05
 # MacDescription = Sort By Found Date and Time
 # MacAuthor = Bob
 # MacFileName = BR_SortByFoundDateAndTime.gsk
@@ -13,6 +13,8 @@
 #                      protože jednou nastavené dnfDate prakticky nejde smazat a když je, tøeba omylem,
 #                      nastavím na pozdìjší datum než datum nálezu, tak se mi to øadí navždy blbì.
 #                    - Místo $_Quote použity apostrofy.
+#   1.05, 2017-07-08 - pøidáno ještì øazení podle userSort, aby se tam, kde není èas nálezu
+#                      (nejstarší nálezy), øadilo podle explicitnì zadaného poøadí.
 #*******************************************
 IF NOT(VarExists("p_BR_SortByFoundDateAndTime_order"))
   # promìnná popisuje aktuální øazení
@@ -22,11 +24,11 @@ ENDIF
 IF ($p_BR_SortByFoundDateAndTime_order <> "DESC")
   # GSAK automaticky pøidá ètvrtý paremetr k funkci REPLACE, tomu ale SQLite nerozumí.
   # SQLSORT orderby=MAX(foundByMeDate, dnfDate) DESC, REPLACE(userData, "~", "") DESC
-  SQLSORT orderby="IFNULL(NULLIF(foundByMeDate, ''), dnfDate) DESC, REPLACE(userData, '~', '') DESC"
+  SQLSORT orderby="IFNULL(NULLIF(foundByMeDate, ''), dnfDate) DESC, REPLACE(userData, '~', '') DESC, userSort DESC"
   $p_BR_SortByFoundDateAndTime_order = "DESC"
 ELSE
   # GSAK automaticky pøidá ètvrtý paremetr k funkci REPLACE, tomu ale SQLite nerozumí.
   # SQLSORT orderby=MAX(foundByMeDate, dnfDate) ASC, REPLACE(userData, "~", "") ASC
-  SQLSORT orderby="IFNULL(NULLIF(foundByMeDate, ''), dnfDate) ASC, REPLACE(userData, '~', '') ASC"
+  SQLSORT orderby="IFNULL(NULLIF(foundByMeDate, ''), dnfDate) ASC, REPLACE(userData, '~', '') ASC, userSort ASC"
   $p_BR_SortByFoundDateAndTime_order = "ASC"
 ENDIF
