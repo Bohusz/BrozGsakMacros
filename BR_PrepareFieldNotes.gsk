@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 1.08
+# MacVersion = 1.09
 # MacDescription = PrepareFieldNotes
 # MacAuthor = roztocil
 # MacFileName = BR_PrepareFieldNotes.gsk
@@ -30,6 +30,8 @@
 #      - otevøení souboru v "poznámkovém bloku"
 #      - nahrání zobrazených (a pøípadnì zeditovaných) dat pøímo na GEOCACHING.COM
 #    - dialog se sám zavøe po 15 sekundách neèinnosti
+# 1.09 2019-04-03:
+#    - Pøechod na GCAPI2.
 #**************************************************************************************
 
 DECLARE var=$NULL type=NUMERIC
@@ -346,14 +348,15 @@ BEGINSUB name=UploadFieldNote
 
    $xx_postData = $fieldNotesPostData
    GOSUB name=LogTypNameToLogTypeId
+   $v_postData = REPLACE("\",       "\\",       $p_logText)
+   $v_postData = REPLACE("$_Quote", "\$_Quote", $v_postData)
 
-   $xx_postData = REPLACE("{LOGTYPEID}",              $r_logTypeId,   $xx_postData)
-   $xx_postData = REPLACE("{CACHEGCCODE}",            $p_cacheGcCode, $xx_postData)
-   $xx_postData = REPLACE("{LOGTSTAMP}",              $p_logTStamp,   $xx_postData)
-   $xx_postData = REPLACE("{LOGTEXT}",                $p_logText,     $xx_postData)
-   $xx_postData = REGEXREPLACE("(?s)<!--.*-->($NL)*", $xx_postData,   "")
+   $xx_postData = REPLACE("{LOGTYPEID}",   $r_logTypeId,   $xx_postData)
+   $xx_postData = REPLACE("{CACHEGCCODE}", $p_cacheGcCode, $xx_postData)
+   $xx_postData = REPLACE("{LOGTSTAMP}",   $p_logTStamp,   $xx_postData)
+   $xx_postData = REPLACE("{LOGTEXT}",     $v_postData,    $xx_postData)
 
-   $xx_response = GCAPI("CreateFieldNoteAndPublish", $xx_postData, "Nahrávám field note")
+   $xx_response = GCAPI2("logdrafts", "POST", $xx_postData, "Nahrávám field note")
    IF $_GcApiError
       # Error running api, so show the error message and put it to clipboard, too
       CLIP data=$xx_response
@@ -378,29 +381,14 @@ ENDSUB
 
 #------------------------------------------------------------------------------------------
 <Data> Varname=$fieldNotesPostData
-<CreateFieldNoteAndPublishRequest xmlns="http://www.geocaching.com/Geocaching.Live/data">
-  <AccessToken>{ACCESSTOKEN}</AccessToken>
-  <CacheCode>{CACHEGCCODE}</CacheCode>
-  <WptLogTypeId>{LOGTYPEID}</WptLogTypeId>
-  <UTCDateLogged>{LOGTSTAMP}</UTCDateLogged>
-  <Note>{LOGTEXT}</Note>
-  <PromoteToLog>false</PromoteToLog>
-  <!--
-  <ImageData>
-    <FileCaption xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">String content</FileCaption>
-    <FileDescription xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">String content</FileDescription>
-    <FileName xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">String content</FileName>
-    <base64ImageData xmlns="http://schemas.datacontract.org/2004/07/Tucson.Geocaching.WCF.API.Geocaching.Types">String content</base64ImageData>
-  </ImageData>
-  <FavoriteThisCache>true</FavoriteThisCache>
-  -->
-  <EncryptLogText>false</EncryptLogText>
-  <!--
-  <UpdatedLatitude>1.26743233E+15</UpdatedLatitude>
-  <UpdatedLongitude>1.26743233E+15</UpdatedLongitude>
-  <Guid>1627aea5-8e0a-4371-9022-9b504344e724</Guid>
-  -->
-</CreateFieldNoteAndPublishRequest>
+{
+  "geocacheCode": "{CACHEGCCODE}",
+  "geocacheLogType": {
+    "id": {LOGTYPEID}
+  },
+  "note": "{LOGTEXT}",
+  "loggedDateUtc": "{LOGTSTAMP}"
+}
 <enddata>
 
 #------------------------------------------------------------------------------------------
