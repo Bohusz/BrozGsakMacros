@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 2.12
+# MacVersion = 2.13
 # MacDescription = Tabulka keší + my logs do blogger.com
 # MacAuthor = Bohusz
 # MacFileName = BR_HtmlLogBase2.gsk
@@ -47,6 +47,8 @@
 #    - Naètení všech typù logù pro vybrané keše.
 #      (Ještì to není dokonalé, pøi výbìru podle data se najdou všechny logy pro keše logované v tomto rozsahu.)
 #    - Oznaèení jiných typù logù v mini tabulce kurzívou.
+# 2.13 (23.05.2016)
+#    - Oprava: nyní rozpozná i odkaz na blog s markupem uvnitø hranatých závorek.
 #*******************************************
 
 # inicializace
@@ -850,6 +852,7 @@ BEGINSUB name=markdownToHtml
   $r_text = RegExReplace("\n*This entry was edited by [^.]+\.",                                 $r_text, "")
   $r_text = RegExReplace("\s*\([^(]*\[\s*GCVote\s*\]\s*\(\s*http://www.gcvote.com\s*\)[^)]*\)", $r_text, "")
   $r_text = RegExReplace("\s*\**\[[^\]]*\]\s*\**\s*\(\s*http://kacer-bob\.[^)]+\)\s*\**",       $r_text, "")
+  $r_text = RegExReplace("\[\s*\**[^\]]*\**\s*\]\s*\(\s*http://kacer-bob\.[^)]+\)\s*\**",       $r_text, "")
 
   # HTML - odrážky
   $r_text = RegExReplace("(\r*\n)(\*\s\s*.*)(\r*\n)([^*])",      $r_text,  "<ul>\2</ul>\3\4",             "\")
