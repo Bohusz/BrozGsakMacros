@@ -49,6 +49,9 @@
 #    - Oznaèení jiných typù logù v mini tabulce kurzívou.
 # 2.13 (23.05.2016)
 #    - Oprava: nyní rozpozná i odkaz na blog s markupem uvnitø hranatých závorek.
+#    - Oprava: GS zmìnil URL obrázkù v logu z https://img.geocaching.com/cache/log/OBRÁZEK
+#      na https://img.geocaching.com/OBRÁZEK, takže pøestalo fungovat generování URL na thumbnails
+#      (https://img.geocaching.com/cache/log/thumb/OBRÁZEK).
 #*******************************************
 
 # inicializace
@@ -632,6 +635,8 @@ BEGINSUB name=htmlSingleLogImage
   $v_imgGuid  = EXTRACT($p_imageData, $SEP, 3)
   $v_imgUrl   = EXTRACT($p_imageData, $SEP, 4)
   $v_imgThumb = REPLACE("/log/", "/log/thumb/", $v_imgUrl, TRUE)
+  $v_imgThumb = REGEXREPLACE("^http.*/s3\.amazonaws\.com/(.*/)?([^/]+)$", $v_imgThumb, "https://img.geocaching.com/cache/log/thumb/$2", "$")
+  $v_imgThumb = REGEXREPLACE("^http.*/img\.geocaching\.com/([^/]+)$",     $v_imgThumb, "https://img.geocaching.com/cache/log/thumb/$1", "$")
   $v_imgShort = REGEXREPLACE("^$p_gcCode\s*\S*\s+", $v_imgName, "")
   $v_imgAlt   =             REGEXREPLACE("^\s*(\S.*)\s*$", $v_imgName,  " alt='$1'",   "$")
   $v_imgAlt   = $v_imgAlt + REGEXREPLACE("^\s*(\S.*)\s*$", $v_imgShort, " title='$1'", "$")
