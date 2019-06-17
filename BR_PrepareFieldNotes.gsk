@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 1.09
+# MacVersion = 1.10
 # MacDescription = PrepareFieldNotes
 # MacAuthor = roztocil
 # MacFileName = BR_PrepareFieldNotes.gsk
@@ -32,6 +32,9 @@
 #    - dialog se sám zavøe po 15 sekundách neèinnosti
 # 1.09 2019-04-03:
 #    - Pøechod na GCAPI2.
+# 1.10 2019-06-17:
+#    - Do generovaných Field Notes se novì vkládá log pøipravený v GSAK (mzi datum
+#      a "more...") a GSAK poznámka (obvykle obsahuje pùvodní Field Note (za "more...").
 #**************************************************************************************
 
 DECLARE var=$NULL type=NUMERIC
@@ -113,6 +116,10 @@ WHILE NOT($_EOL)
     GOSUB name=LogTextSeparator
     $logText = "$logText$d_userData - "
   ENDIF
+  $gsakLog = REPLACE(CHR(10), "·", REPLACE(CHR(13), "", TRIM(EXTRACT($d_UserNote,"$~",2))))
+  IF NOT(ISEMPTY($gsakLog))
+    $logText = "$gsakLog $logText"
+  ENDIF
   $blog_url = $global_blog_url
   IF $UseStoredBlogName
     GOSUB name=PrepareStoredUrlIfExists
@@ -121,6 +128,13 @@ WHILE NOT($_EOL)
     GOSUB name=LogTextSeparator
     # UBB: $logText = "$logText[url=$blog_url][size=1][i]more...[/i][/size][/url]"
     $logText = "$logText[*more...*]($blog_url)"
+  ENDIF
+  $gsakNotes = REPLACE(CHR(10), "·", REPLACE(CHR(13), "", TRIM(EXTRACT($d_UserNote,"$~",1))))
+  IF REGEX("^\[\d+[.-]\d+[.-]\d+ +\d+:\d+,\s*[^\]]+]\s*\x22\x22\s*$", $gsakNotes)
+    $gsakNotes = ""
+  ENDIF
+  IF NOT(ISEMPTY($gsakNotes))
+    $logText = "$logText · **GSAK:** $gsakNotes"
   ENDIF
 
   $line = "$d_code,$timeStamp,$logType,"
