@@ -54,6 +54,10 @@
 #      (https://img.geocaching.com/cache/log/thumb/OBRÁZEK).
 # 2.14 (29.5.2019)
 #    - Oprava odstraòování odkazu na blog. Nyní mimo jiné oèekává uvnitø skobek text "more...".
+# 2.15 (2.2.2020)
+#    - Obrázky pøiložené k logu se vkládaly v obráceném poøadí.
+#      Ve skuteènosti žádné poøadí nemají a vkládají se v "pøirozeném poøadí", tj. tak, jak jsou
+#      naèteny z databáze. Nyní se tedy do logu vloží "pozpátku", nejpozdìji naètený jako první atd.
 #*******************************************
 
 # inicializace
@@ -618,15 +622,10 @@ BEGINSUB name=htmlLogImages
   WHILE array($IMAGES, $v_imgIndex) <> ""
     $p_imageData = array($IMAGES, $v_imgIndex)
     GOSUB name=htmlSingleLogImage
-    $r_logImagesHtml = "$r_logImagesHtml$NL$r_singleLogImageHtml"
+    $r_logImagesHtml = "$r_singleLogImageHtml$NL$r_logImagesHtml"
 
     $v_imgIndex = $v_imgIndex + 1
   ENDWHILE
-
-#  IF $r_logImagesHtml <> ""
-##    $r_logImagesHtml = "<table>$NL$r_logImagesHtml</table>$NL"
-#    $r_logImagesHtml = "<p>$NL$r_logImagesHtml</p>$NL"
-#  ENDIF
 
   $v_x = removeVar("v_imgIndex")
 ENDSUB
