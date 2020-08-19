@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 2.13
+# MacVersion = 2.16
 # MacDescription = Tabulka keší + my logs do blogger.com
 # MacAuthor = Bohusz
 # MacFileName = BR_HtmlLogBase2.gsk
@@ -58,6 +58,8 @@
 #    - Obrázky pøiložené k logu se vkládaly v obráceném poøadí.
 #      Ve skuteènosti žádné poøadí nemají a vkládají se v "pøirozeném poøadí", tj. tak, jak jsou
 #      naèteny z databáze. Nyní se tedy do logu vloží "pozpátku", nejpozdìji naètený jako první atd.
+# 2.16 (19.8.2020)
+#    - Èas mùže obsahovat i vteøiny.
 #*******************************************
 
 # inicializace
@@ -70,12 +72,12 @@ $WORK = 3
 $IMAGES = 4
 $BLOGS = "BLOGS"
 #
-$LOGREC_RE        = "^([-.0-9]+) +(~?\d?\d:\d\d(/\d?\d:\d\d)?)?,([^,]+),([^,]+),([^,]*)$"
+$LOGREC_RE        = "^([-.0-9]+) +(~?\d?\d:\d\d(:\d\d)?(/\d?\d:\d\d(:\d\d)?)?)?,([^,]+),([^,]+),([^,]*)$"
 $LOGREC_DATE_GRP  = 1
 $LOGREC_TIME_GRP  = 2
-$LOGREC_TYPE_GRP  = 4
-$LOGREC_CACHE_GRP = 5
-$LOGREC_LOGID_GRP = 6
+$LOGREC_TYPE_GRP  = 6
+$LOGREC_CACHE_GRP = 7
+$LOGREC_LOGID_GRP = 8
 #
 $BLOGITEM_RE        = "^([-.0-9]+),([-.0-9]+),([^,]+)(,(\d+),(\d+))?$"
 $BLOGITEM_DATE1_GRP = 1
@@ -98,6 +100,9 @@ $VERBOSE = FALSE
 
 GOSUB name=VstupniFormular
 
+IF $rbtSmart
+  GOSUB name=initSmartSelection
+ENDIF
 IF $rbtAll
   GOSUB name=getLimittingDates
 ENDIF
@@ -161,6 +166,16 @@ CLIP DATA=$html
 ##################################################################################################################
 ##                                                                                   P Ø Í P R A V A   D A T    ##
 ##################################################################################################################
+
+BEGINSUB name=smartDataLookup
+  TABLE active=CACHES
+  GOTO position=TOP
+  WHILE NOT($_EOL)
+    
+    GOTO position=NEXT
+  ENDWHILE
+     
+ENDSUB
 
 BEGINSUB name=lookupData
   array($ITEMS, 0) = "1024"
@@ -1169,7 +1184,7 @@ ENDSUB
 Name = frmVstupniFormular
   Type = Form
   Caption = Tabulky do blogu
-  Height = 215
+  Height = 245
   Width = 350
   Delay = 7
 
@@ -1182,11 +1197,21 @@ Name = Groupbox1
   Width = 137
   Taborder = 12
 
-Name = rbtAll
+Name = rbtSmart
   Type = Radiobutton
   Height = 17
   Left = 8
   Top = 8
+  Width = 113
+  Taborder = 8
+  ExitOnChange = Yes
+  Caption = Chytrý výbìr ;)
+
+Name = rbtAll
+  Type = Radiobutton
+  Height = 17
+  Left = 8
+  Top = 32
   Width = 113
   Taborder = 8
   ExitOnChange = Yes
@@ -1196,7 +1221,7 @@ Name = rbtLogDate
   Type = Radiobutton
   Height = 17
   Left = 8
-  Top = 32
+  Top = 56
   Width = 113
   Taborder = 9
   ExitOnChange = Yes
@@ -1206,7 +1231,7 @@ Name = Label1
   Type = Label
   Height = 13
   Left = 24
-  Top = 56
+  Top = 80
   Width = 12
   Caption = od
 
@@ -1214,7 +1239,7 @@ Name = datFrom
   Type = Date
   Height = 21
   Left = 48
-  Top = 51
+  Top = 75
   Width = 121
   Taborder = 10
 #  ExitOnChange = Yes
@@ -1223,7 +1248,7 @@ Name = Label2
   Type = Label
   Height = 13
   Left = 24
-  Top = 80
+  Top = 104
   Width = 12
   Caption = do
 
@@ -1231,7 +1256,7 @@ Name = datUpto
   Type = Date
   Height = 21
   Left = 48
-  Top = 75
+  Top = 99
   Width = 121
   Taborder = 11
 
@@ -1239,7 +1264,7 @@ Name = rbtLogUrl
   Type = Radiobutton
   Height = 17
   Left = 8
-  Top = 104
+  Top = 128
   Width = 113
   Taborder = 12
   ExitOnChange = Yes
@@ -1249,7 +1274,7 @@ Name = LabelLogUrl
   Type = Label
   Height = 13
   Left = 24
-  Top = 128
+  Top = 152
   Width = 12
   Caption = URL
 
@@ -1257,7 +1282,7 @@ Name = txtLogUrl
   Type = Edit
   Height = 17
   Left = 48
-  Top = 123
+  Top = 147
   Width = 265
   Taborder = 13
 
@@ -1266,7 +1291,7 @@ Name = btnPickBlog
   Escape = Yes
   Height = 25
   Left = 317
-  Top = 121
+  Top = 145
   Width = 16
   Taborder = 14
   Caption = ...
@@ -1275,7 +1300,7 @@ Name = chbReloadBlogs
   Type = Checkbox
   Height = 17
   Left = 24
-  Top = 147
+  Top = 171
   Width = 150
   Taborder = 15
   Caption = obnovit data blogù
@@ -1284,7 +1309,7 @@ Name = chbVerbose
   Type = Checkbox
   Height = 17
   Left = 8
-  Top = 164
+  Top = 188
   Width = 150
   Taborder = 15
   Caption = prùbìžná hlášení (verbose)
@@ -1321,7 +1346,7 @@ Name = btnOk
   Enter = Yes
   Height = 25
   Left = 168
-  Top = 157
+  Top = 181
   Width = 75
   Taborder = 19
   Caption = Ok
@@ -1331,7 +1356,7 @@ Name = btnCancel
   Escape = Yes
   Height = 25
   Left = 256
-  Top = 157
+  Top = 81
   Width = 75
   Taborder = 20
   Caption = Storno
