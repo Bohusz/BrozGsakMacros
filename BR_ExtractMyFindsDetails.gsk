@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 1.03
+# MacVersion = 1.04
 # MacDescription = Aktualizace údajù o nálezech podle logu
 # MacAuthor = roztocil
 # MacFileName = BR_ExtractMyFindsDetails.gsk
@@ -8,6 +8,7 @@
 # 2017-05-28, 1.02 - vyhledávání pøes SQLLITE
 # 2018-10-23, 1.03 - možnost zpracování oznaèených (userflad) záznamù
 #                  - možnost pøepsání existujících záznamù
+# 2022-01-04, 1.04 - rozpoznání i podle protokolu https
 #--------------------------------------------------------------------------
 VSUB status=ON
 
@@ -15,7 +16,7 @@ GOSUB name=ask
 
 $MODE           = $r_mode
 $REWRITE        = $r_rewrite
-$BLOGS_SITE     = "http://kacer-bob.blogspot."
+$BLOGS_SITE     = "kacer-bob.blogspot."
 $BLOGPAGE_FIELD = "MyBlogName"
 $BLOGPATH_FIELD = "MyBlogPath"
 $LOG_OWNER      = "Bohusz"
@@ -41,7 +42,7 @@ $TEMPLATE = $TEMPLATE + "  JOIN Caches  c ON c.Code    = l.lParent"
 $TEMPLATE = $TEMPLATE + "  JOIN Custom  k ON k.cCode   = c.Code"
 $TEMPLATE = $TEMPLATE + " WHERE l.lType IN ('Found it', 'Attended', 'Webcam Photo taken')"
 $TEMPLATE = $TEMPLATE + "   AND l.lBy = '$LOG_OWNER'"
-$TEMPLATE = $TEMPLATE + "   AND m.ltext LIKE '%$BLOGS_SITE%'"
+$TEMPLATE = $TEMPLATE + "   AND (m.ltext LIKE '%http://$BLOGS_SITE%' OR m.ltext LIKE '%https://$BLOGS_SITE%')"
 BEGINCASE
   CASE $MODE = "ALL_EMPTY"
        $TEMPLATE = $TEMPLATE + "   AND COALESCE(k.$BLOGPAGE_FIELD, '') = ''"
@@ -73,9 +74,9 @@ WHILE NOT($_SqlEol0)
    SHOWSTATUS msg="($i / $count) $qCode $qName" width=400 height=250 mtype=MULTI display=ON title="Aktualizace údajù o nálezech podle logu"
    $myDate  = $qDate
    $myTime  = RegExSub("(~?\d?\d:\d\d)", $qText, 1, 1)
-   $myBlog  = RegExSub("$BLOGS_SITE\w+/\d+/\d+/([-a-z0-9]+)(\.html)?\W", $qText, 1, 1)
-   $myPage  = RegExSub("$BLOGS_SITE\w+/p/([-a-z0-9]+)(\.html)?\W", $qText, 1, 1)
-   $myPath  = RegExSub("$BLOGS_SITE\w+/((\d+/\d+|p)/[-a-z0-9]+(\.html)?)\W", $qText, 1, 1)
+   $myBlog  = RegExSub("https?://$BLOGS_SITE\w+/\d+/\d+/([-a-z0-9]+)(\.html?)?\W", $qText, 1, 1)
+   $myPage  = RegExSub("https?://$BLOGS_SITE\w+/p/([-a-z0-9]+)(\.html?)?\W", $qText, 1, 1)
+   $myPath  = RegExSub("https?://$BLOGS_SITE\w+/((\d+/\d+|p)/[-a-z0-9]+(\.html?)?)\W", $qText, 1, 1)
    $myOrder = RegExSub("#\s*(\d+)", $qText, 1, 1)
 
    IF NOT(SEEK($qCode))
