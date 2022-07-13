@@ -1,15 +1,22 @@
 #*******************************************
-# MacVersion = 1.01
+# MacVersion = 1.04
 # MacDescription = BR Naètení fields notes
 # MacAuthor = Bohusz
 # MacFileName = BR_LoadFieldNotes.gsk
 # MacUrl = http://www.xlii.cz/downloads/gsak/macros/BR_LoadFieldNotes.gsk
 #*******************************************
 # 2018-06-03 1.01 - rozpoznání UTF16 bez BOM
+# 2021-08-02 1.02 - poznámka (poslední sloupec) mùže obsahovat èárky (a pak je v uvozovkách)
+# 2022-07-07 1.03 - podpora pro (volitelný) výpis informací o prùbìhu zpracování
+#                 - výbìr typu koncù øádkù
+# 2022-07-10 1.04 - spojování víceøádkových fieldnotes
+#                 - drobné vylepšení výpisù
 #
-$UTF8_BOM       = CHR(239)+CHR(187)+CHR(191) # hex: EF BB BF
-$UTF16_BOM      = CHR(255)+CHR(254)          # hex: FF FE
-$LINE_SEPARATOR = CHR(13)+CHR(10)            # CR+LF
+$UTF8_BOM  = CHR(239)+CHR(187)+CHR(191) # hex: EF BB BF
+$UTF16_BOM = CHR(255)+CHR(254)          # hex: FF FE
+$CR        = CHR(13)
+$LF        = CHR(10)
+$CRLF      = "$CR$LF"                   # CR+LF
 $GCGETCACHES_SETTINGS = "XXX:BR_LoadFieldNotes.SETTINGS"
 $LINES_LIST           = "PARSED_DRAFT_LINES"
 $MISSINGCACHES_LIST   = "MISSING_CACHES"
@@ -19,8 +26,10 @@ $DNFTEXTS_LIST        = "NOT_FOUND_TEXTS_LIST"
 GOSUB name=initialize
 
 GOSUB name=readForm
-$inputFname = $r_fname
-$gmtOffset  = $r_gmtOffset
+$inputFname    = $r_fname
+$gmtOffset     = $r_gmtOffset
+$showStatus    = $r_showstatus
+$lineSeparator = $r_lineSeparator
 
 $inputContent = GETFILE($inputFname)
 IF LEFT($inputContent, 7) = "*Error*"
@@ -48,6 +57,11 @@ GOSUB name=parseLines
 $p_listName  = $LINES_LIST
 $p_gmtOffset = $gmtOffset
 GOSUB name=processFieldNotes
+
+IF $showStatus
+  MSGOK msg="Done."
+  SHOWSTATUS display=OFF
+ENDIF
 
 ##############################################################################################
 
@@ -111,7 +125,7 @@ BEGINSUB name=applyFieldNote
   # OUT $r_logType
   # OUT $r_logNotes
   IF NOT(SEEK($r_gcCode))
-    MSGOK msg="Nenalezen záznam pro keš $r_gcCode ($p_index. v poøadí).$LINE_SEPARATOR$LINE_SEPARATOR Zpracování bude ukonèeno."
+    MSGOK msg="Nenalezen záznam pro keš $r_gcCode ($p_index. v poøadí).$lineSeparator$lineSeparator Zpracování bude ukonèeno."
   ENDIF
 
   BEGINCASE
@@ -131,7 +145,7 @@ BEGINSUB name=applyFieldNote
   IF ISEMPTY($x08_notes)
     $x08_notes = $x08_note
   ELSE
-    $x08_notes = "$x08_notes$LINE_SEPARATOR$x08_note"
+    $x08_notes = "$x08_notes$lineSeparator$x08_note"
   ENDIF
   IF ISEMPTY($x08_log)
     $d_userNote = $x08_notes
@@ -161,12 +175,18 @@ BEGINSUB name=createMissingCaches
   #
   $x03_listName = $p_listName
 
+  $p_msg = "CREATE MISSING CACHES"
+  GOSUB name=showStatus
+
   $x03_codes = LIST($p_listName, "GET", "")
   $p_codes = REPLACE(";", ",", $x03_codes)
   GOSUB name=loadCachesFromGeocaching
 
   $p_listName = $x03_listName
   GOSUB name=createPlaceholdersForNonExistentCacheCodes
+
+  $p_msg = ""
+  GOSUB name=showStatus
 ENDSUB
 
 BEGINSUB name=createPlaceholdersForNonExistentCacheCodes
@@ -186,18 +206,26 @@ BEGINSUB name=createPlaceholder
   ADDNEW
   $d_code = $p_code
   $d_name = "Placeholder for $p_code"
+
+  $p_msg = "$p_code - Placeholder created."
+  GOSUB name=showStatus
 ENDSUB
 
 BEGINSUB name=loadCachesFromGeocaching
-  $x05_isInTransaction = INTRANSACTION()
-  IF $x05_isInTransaction 
-    TRANSACTION action=END
-  ENDIF
+  IF $p_codes <> ""
+    $x05_isInTransaction = INTRANSACTION()
+    IF $x05_isInTransaction 
+      TRANSACTION action=END
+    ENDIF
 
-  GCGETCACHES settings=$GCGETCACHES_SETTINGS load=Y showSummary=NO GCCODES=$p_codes
+    GCGETCACHES settings=$GCGETCACHES_SETTINGS load=Y showSummary=NO GCCODES=$p_codes
 
-  IF $x05_isInTransaction 
-    TRANSACTION action=BEGIN
+    IF $x05_isInTransaction 
+      TRANSACTION action=BEGIN
+    ENDIF
+
+    $p_msg = "$p_codes - Loaded from geocaching.com."
+    GOSUB name=showStatus
   ENDIF
 ENDSUB
 
@@ -216,7 +244,12 @@ BEGINSUB name=findMissingCaches
 
     IF NOT(SEEK($x05_gcCode))
       $x = LIST($p_outputListName, "ADD", $x05_gcCode)
+      $p_msg = "Cache code $x05_gcCode... NOT FOUND"
+    ELSE
+      $p_msg = "Cache code $x05_gcCode... Found!"
     ENDIF
+    GOSUB name=showStatus
+
     $i = $i + 1
   ENDWHILE
 ENDSUB
@@ -237,10 +270,19 @@ BEGINSUB name=parseFieldNotesLine
   $x06_list = "xxx_TEMPLIST_xxx"
   $x = LIST($x06_list, "CREATE", ",")
   $x = LIST($x06_list, "REPLACE", $p_line)
+  $x06_listSize = VAL(LIST($x06_list, "COUNT", ""))
   $r_gcCode      = LIST($x06_list, "ITEM", "1")
   $x06_logDateTime = LIST($x06_list, "ITEM", "2")
   $r_logType     = LIST($x06_list, "ITEM", "3")
   $r_logNotes    = LIST($x06_list, "ITEM", "4")
+  IF $r_logNotes <> "" AND LEFT($r_logNotes, 1) = $_QUOTE
+    $x06_i = 4
+    WHILE RIGHT($r_logNotes, 1) <> $_QUOTE AND $x06_i < $x06_listSize
+      $x06_i = $x06_i + 1
+      $r_logNotes = "$r_logNotes," + LIST($x06_list, "ITEM", "$x06_i")
+    ENDWHILE
+    $r_logNotes = SUBSTR($r_logNotes, 2, LEN($r_logNotes)-2)
+  ENDIF
   $x = LIST($x06_list, "DESTROY", "")
 
   $p_dateTime  = $x06_logDateTime
@@ -285,7 +327,7 @@ BEGINSUB name=parseDateTime
   $r_date = $x07_date + $x07_dayOffset
   $r_time = "$x07_h1$x07_h2:$x07_m1$x07_m2"
 
-  ##PAUSE msg="  input: $p_dateTime [$p_gmtOffset]$LINE_SEPARATOR output: $r_date $r_time"
+  ##PAUSE msg="  input: $p_dateTime [$p_gmtOffset]$lineSeparator output: $r_date $r_time"
 ENDSUB
 
 BEGINSUB name=startDatabaseProcessing
@@ -313,23 +355,42 @@ BEGINSUB name=commenseDatabaseProcessing
 ENDSUB
 
 BEGINSUB name=parseLines
-  # IN $p_data     - øetìzec s øádky oddìlenými sekvence $LINE_SEPARATOR
+  # IN $p_data     - øetìzec s øádky oddìlenými sekvence $lineSeparator
   # IN $p_listName - název seznamu, který bude naplnìn jednotlivými øádky
   #
   # Výsledný seznam neobsahuje øádky, které jsou prázdné (obsahují jen BLANK znaky)
   # nebo zaèínají znakem møíž nebo støedník.
   #
-  $x = LIST($p_listName, "CREATE", $LINE_SEPARATOR)
+  $p_msg="PARSING LINES"
+  GOSUB name=showStatus
+  #
+  $x = LIST($p_listName, "CREATE", $lineSeparator)
   $x = LIST($p_listName, "REPLACE", $p_data)
   $x07_size = VAL(LIST($p_listName, "COUNT", ""))
+  $x07_trailingData = ""
   $i = $x07_size
   WHILE $i > 0
-    $x = TRIM(LIST($p_listName, "ITEM", "$i"))
-    IF $x = "" OR SUBSTR($x, 1, 1) = "#" OR SUBSTR($x, 1, 1) = ";"
+    $x = ALLTRIM(LIST($p_listName, "ITEM", "$i"))
+    $x07_lineStartsWithCode = REGEX("^[0-9A-Z]+(-[0-9A-Z]+)?,", $x)
+    IF $x = "" OR SUBSTR($x, 1, 1) = "#" OR SUBSTR($x, 1, 1) = ";" OR NOT($x07_lineStartsWithCode)
+      IF $x07_lineStartsWithCode
+        $x07_trailingData = "$lineSeparator$x$x07_trailingData"
+      ENDIF
       $x = LIST($p_listName, "DELETE", "$i")
+      $p_msg = "[$i] - $x"
+    ELSE
+      $p_msg = "[$i] + $x"
+    ENDIF
+    GOSUB name=showStatus
+    IF $x07_lineStartsWithCode
+      $x = LIST($p_listName, "ITEM", "$i")
+      $x = LIST($p_listName, "EDIT:$i", "$x$x07_trailingData")
+      $x07_trailingData = ""
     ENDIF
     $i = $i - 1
   ENDWHILE
+  $p_msg=""
+  GOSUB name=showStatus
 ENDSUB
 
 BEGINSUB name=showList
@@ -339,7 +400,7 @@ BEGINSUB name=showList
   $x07_size = VAL(LIST($p_listName, "COUNT", ""))
   $i = 1
   WHILE $i <= $x07_size
-    $x07_msg = "$x07_msg[$i] " + LIST($p_listName, "ITEM", "$i") + $LINE_SEPARATOR
+    $x07_msg = "$x07_msg[$i] " + LIST($p_listName, "ITEM", "$i") + $lineSeparator
     $i = $i + 1
   ENDWHILE
 
@@ -367,7 +428,7 @@ BEGINSUB name=decodeData
 ENDSUB
 
 BEGINSUB name=guessEncoding
-  ##$msg = SUBSTR($p_data, 1, 30)+$LINE_SEPARATOR+"data: "+NUMTOSTR(ASC(SUBSTR($p_data, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($p_data, 2, 1)))+" "+NUMTOSTR(ASC(SUBSTR($p_data, 3, 1)))+$LINE_SEPARATOR+"UTF8: "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 2, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 3, 1)))+$LINE_SEPARATOR+"UTF16: "+NUMTOSTR(ASC(SUBSTR($UTF16_BOM, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF16_BOM, 2, 1)))
+  ##$msg = SUBSTR($p_data, 1, 30)+$lineSeparator+"data: "+NUMTOSTR(ASC(SUBSTR($p_data, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($p_data, 2, 1)))+" "+NUMTOSTR(ASC(SUBSTR($p_data, 3, 1)))+$lineSeparator+"UTF8: "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 2, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF8_BOM, 3, 1)))+$lineSeparator+"UTF16: "+NUMTOSTR(ASC(SUBSTR($UTF16_BOM, 1, 1)))+" "+NUMTOSTR(ASC(SUBSTR($UTF16_BOM, 2, 1)))
   ##MSGOK msg=$msg
   IF SUBSTR($p_data, 1, LEN($UTF8_BOM)) = $UTF8_BOM
     $r_encoding = "UTF8_BOM"
@@ -419,13 +480,23 @@ BEGINSUB name=isUtf16WithNoBom
   ENDWHILE
 ENDSUB
 
+BEGINSUB name=showStatus
+  IF $showStatus
+    SHOWSTATUS height=640 width=320 display=ON mtype=MULTI title="Load Field Notes" msg=$p_msg
+  ENDIF
+ENDSUB
+
 BEGINSUB name=readForm
   # OUT $r_fname     - plnì kvalifikované jméno souboru s field notes
   # OUT $r_gmtOffset - èasový posun oproti GMT zónì (ZULU) v celých hodinách
   #
-  $FileName = ""
-  $TimeZone = "1"
-  MACSETTINGS type=R vars=FileName,TimeZone fileCheck=N
+  $FileName   = ""
+  $TimeZone   = "1"
+  $ShowStatus = FALSE
+  $LineSeparatorCrLf = TRUE
+  $LineSeparatorCr   = FALSE
+  $LineSeparatorLf   = FALSE
+  MACSETTINGS type=R vars=FileName,TimeZone,LineSeparatorCrLf,LineSeparatorCr,LineSeparatorLf,ShowStatus fileCheck=N
 
   WHILE TRUE
     $result = FORM($SelectFileForm, "")
@@ -437,10 +508,18 @@ BEGINSUB name=readForm
           SHOWSTATUS display=OFF
           BREAK
         ENDIF
-        $r_fname     = $FileName
-        $r_gmtOffset = VAL($TimeZone)
+        $r_fname      = $FileName
+        $r_gmtOffset  = VAL($TimeZone)
+        $r_showstatus = $ShowStatus
+        $r_lineSeparator = $CRLF
+	IF $LineSeparatorCr
+          $r_lineSeparator = $CR
+        ENDIF
+        IF $LineSeparatorLf
+          $r_lineSeparator = $LF
+        ENDIF
 
-        MACSETTINGS type=S vars=FileName,TimeZone
+        MACSETTINGS type=S vars=FileName,TimeZone,LineSeparatorCrLf,LineSeparatorCr,LineSeparatorLf,ShowStatus
         EXITSUB
     CASE $result = "CancelButton" OR $result = "DelayExit" OR $result = "SystemExit"
       RETURN
@@ -456,14 +535,14 @@ ENDSUB
 Name = SelectFileForm
   Type = Form
   Caption = Vyberte field notes soubor
-  Height = 140
+  Height = 172
   Width = 500
 
 Name = FileNameLabel
   Type = Label
   Height = 17
   Left = 8
-  Top = 16
+  Top = 14
   Width = 42
   Caption = Soubor
 
@@ -479,7 +558,7 @@ Name = TimeZoneLabel
   Type = Label
   Height = 17
   Left = 8
-  Top = 48
+  Top = 46
   Width = 70
   Caption = Èasová zóna
 
@@ -495,27 +574,80 @@ Name = TimeZoneExplanationLabel
   Type = Label
   Height = 17
   Left = 136
-  Top = 48
+  Top = 46
   Width = 149
   Caption = (posun proti GMT v hodinách)
+
+Name = LineSeparator
+  Type = Groupbox
+  Visible = NO
+  Height = 25
+  Left = 2
+  Top = 72
+  Width = 480
+
+Name = LineSeparatorLabel
+  Type = Label
+  Height = 17
+  Left = 8
+  Top = 78
+  Width = 80
+  Caption = Konce øádkù
+
+Name = LineSeparatorCrLf
+  Type = Radiobutton
+  Container = Line Separator
+  Height = 25
+  Left = 80
+  Top = 74
+  Width = 50
+  Caption = CRLF
+
+Name = LineSeparatorLf
+  Type = Radiobutton
+  Container = Line Separator
+  Height = 25
+  Left = 136
+  Top = 74
+  Width = 40
+  Caption = LF
+
+Name = LineSeparatorCr
+  Type = Radiobutton
+  Container = Line Separator
+  Height = 25
+  Left = 180
+  Top = 74
+  Width = 40
+  Caption = CR
+
+Name = ShowStatus
+  Type = Checkbox
+  Height = 25
+  Left = 8
+  Top = 110
+  Width = 200
+  Taborder = 15
+  Caption = Informace o prùbìhu
 
 Name = OkButton
   Type = Button
   Enter = Yes
   Height = 25
   Left = 328
-  Top = 72
+  Top = 104
   Width = 75
-  Taborder = 12
+  Taborder = 16
   Caption = Ok
 
 Name = CancelButton
   Type = Button
+  Escape = YES
   Height = 25
   Left = 408
-  Top = 72
+  Top = 104
   Width = 75
-  Taborder = 13
+  Taborder = 17
   Caption = Storno
 
 <enddata>
