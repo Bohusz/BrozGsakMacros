@@ -1,0 +1,124 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = Download FieldNotes from Geocaching.com
+# MacAuthor = Bohusz
+# MacFileName = BR_DownloadPendingFieldNotes.gsk
+# MacUrl =
+#*******************************************
+#
+$OUTPUT_FILENAME = "$_appData\fieldNotes\pending\pending_field-notes_#TSTAMP#.txt"
+$DOWNLOAD_LOGDRAFTS_FIELDS  = "referenceCode,geocacheCode,loggedDate,geocacheLogType,note"
+$TAKE_MAX = 50
+#
+GOSUB name=resetFieldNotesVariables
+$v_skip = 0
+$v_batchRecords = -1
+$v_totalRecords = 0
+#
+$p_datetime = DATETOSTRING($_today)+$_time
+GOSUB name=toTStamp
+$v_outputFileName = REPLACE("#TSTAMP#", $r_tstamp, $OUTPUT_FILENAME)
+$p_filename = $v_outputFileName
+GOSUB name=PrepareFile
+#
+## WHILE $v_skip = 0
+WHILE $v_batchRecords < 0 OR $v_batchRecords = $TAKE_MAX
+   $v_batchRecords = 0  
+   $v_caption = "Stahuji field notes " + NUMTOSTR($v_skip + 1) + " až " + NUMTOSTR($v_skip + $TAKE_MAX) + " z Geocaching.com"
+   $v_apiCall = "logdrafts?skip=$v_skip&take=50&fields=$DOWNLOAD_LOGDRAFTS_FIELDS"
+   ## MSGOK msg=$v_apiCall
+   $v_response = GCAPI2($v_apiCall, "GET", "", $v_caption)
+   ## MSGOK msg=$v_response
+   #
+   $v_response = ""
+   $v_status = SQLITE("sql", "SELECT key, data FROM gcApi2", "sqlget=4")
+   WHILE NOT($_SqlEol4)
+      $v_key  = SQLGET("key", 4)
+      $v_data = SQLGET("data",4)
+      $v_response = "$v_response$v_key: $v_data$_CRLF"
+      SQLNEXT handle=4
+      BEGINCASE
+      CASE $v_key = "/referenceCode"
+	 $v_refCode = $v_data
+      CASE $v_key = "/geocacheCode"
+	 $v_cacheCode = $v_data
+      CASE $v_key = "/loggedDate"
+	 $v_logTime = REGEXREPLACE("\.\d+$", $v_data, "")
+      CASE $v_key = "/geocacheLogType/name"
+	 $v_logType = $v_data
+      CASE $v_key = "/note"
+	 $v_logText = QUOTE(REPLACE($_quote, "'", $v_data))
+         #
+         # "/note" je poslední položka => zapíšeme do souboru-
+         #
+         $p_text = $v_logtext
+         GOSUB name=normalizeLogText
+         $p_text = "$v_cacheCode,$v_logTime,$v_logType,$r_text$_CRLF"
+         GOSUB name=WriteTextToFile
+         #
+         $v_batchRecords = $v_batchRecords + 1
+         $v_totalRecords = $v_totalRecords + 1
+         GOSUB name=resetFieldNotesVariables
+      ENDCASE
+   ENDWHILE
+   SQLGETCLOSE handle=4
+   $v_skip = $v_totalRecords
+ENDWHILE
+
+## MSGOK msg=$v_response
+$xx_question = "$v_totalRecords naètených field notes uloženo do souboru$_CRLF$_CRLF"
+$xx_question = "$xx_question$v_outputFileName$_CRLF$_CRLF"
+$xx_question = $xx_question + "Chcete je naèíst do tabulky PublishLogs?"
+IF YESNO($xx_question)
+   GcPublishFetch type=FILE file=$v_outputFileName
+ENDIF
+
+BEGINSUB name=resetFieldNotesVariables
+   $v_refCode = ""
+   $v_cacheCode = ""
+   $v_logTime = ""
+   $v_logType = ""
+   $v_logText = ""
+ENDSUB
+
+BEGINSUB name=toTStamp
+   $xx_datetime = REGEXREPLACE("[^0-9Z]", UPPER($p_datetime), "")
+   $r_tstamp = SUBSTR($xx_datetime,1,8)+"-"+SUBSTR($xx_datetime,9,0)
+   ## CANCEL msg="$p_datetime$_CRLF$xx_datetime$_CRLF$r_tstamp"
+ENDSUB
+   
+BEGINSUB name=normalizeLogText
+   $xx_re  = "\[url=([^\]]+)\](.*)\[/url\]"
+   $r_text = REGEXREPLACE($xx_re, $p_text, "[$2]($1)", "$")
+   $r_text = REPLACE("[i]",      "*", $r_text)
+   $r_text = REPLACE("[/i]",     "*", $r_text)
+   $r_text = REPLACE("[size=1]", "",  $r_text)
+   $r_text = REPLACE("[/size]",  "",  $r_text)
+ENDSUB
+##############################################################################
+##
+## PØEVZATO Z "BR_PrepareFieldNotes.gsk"
+##
+BEGINSUB name=PrepareFile
+  IF FileExists($p_filename)
+     FileErase file=$p_filename onerror=ABORT
+  ENDIF
+  # zapíšeme BOM
+  $result = AppendFile($p_filename, UTF16("", "e"))
+  GOSUB name=CheckFileOpResult
+ENDSUB
+
+BEGINSUB name=WriteTextToFile
+  $xx_text = UTF16($p_text, "e")
+  # Odstraníme BOM
+  $xx_text = SUBSTR($xx_text, 3, 0)
+  $result = AppendFile($p_filename, $xx_text)
+  GOSUB name=CheckFileOpResult
+ENDSUB
+
+BEGINSUB name=CheckFileOpResult
+  IF LEFT($result, 7) = "*Error*"
+    PAUSE msg=$result
+    CANCEL
+  ENDIF
+ENDSUB

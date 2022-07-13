@@ -1,0 +1,36 @@
+$vip = "'Bohusz', 'Eskaver', 'listri'"
+
+$cmd = ""
+$cmd = "$cmd SELECT l.lType, l.lBy, l.lDate, l.lTime, m.lText"
+$cmd = "$cmd   FROM logs    l"
+$cmd = "$cmd   JOIN logmemo m ON m.lParent = l.lParent AND m.lLogId = l.lLogId"
+$cmd = "$cmd  WHERE l.lParent = '$d_Code'"
+$cmd = "$cmd    AND l.lBy IN ($vip)"
+$cmd = "$cmd  ORDER BY l.lDate DESC, l.lTime DESC, l.lLogId DESC"
+## MSGOK msg=$cmd
+
+$_Special = ""
+
+$status = SQLITE("sql", $cmd, "sqlget=4")
+WHILE NOT($_SqlEol4)
+   $type = SQLGET("lType", 4)
+   $user = SQLGET("lBy", 4)
+   $date = SQLGET("lDate", 4)
+   $time = SQLGET("lTime", 4)
+   $text = SQLGET("lText", 4)
+
+   $html = BBCODE($text)
+   $html = REGEXREPLACE("\[([^\]]*)\]\s*\((http[^)]*)\)", $html, "<a href=$_QUOTE$2$_QUOTE>$1</a>", "$")
+   $html = REGEXREPLACE("###(.*)###", $html, "<h3>$1</h3>", "$")
+   $html = REGEXREPLACE("##(.*)##", $html, "<h2>$1</h2>", "$")
+   $html = REGEXREPLACE("#(.*)#", $html, "<h1>$1</h1>", "$")
+   $html = REGEXREPLACE("[*][*]([^*]*)[*][*]", $html, "<b>$1</b>", "$")
+   $html = REGEXREPLACE("__([^_]*)__", $html, "<b>$1</b>", "$")
+   $html = REGEXREPLACE("[*]([^*]*)[*]", $html, "<i>$1</i>", "$")
+   $html = REGEXREPLACE("_([^_]*)_", $html, "<i>$1</i>", "$")
+   $date = NUMTOSTR(VAL(SUBSTR($date, 9, 2)))+"."+NUMTOSTR(VAL(SUBSTR($date, 6, 2)))+"."+NUMTOSTR(VAL(SUBSTR($date, 1, 4)))
+
+   $_Special = "$_Special<p><b>$date, $user</b>: $html</p>$_CrLf"
+   SQLNEXT handle=4
+ENDWHILE
+SQLGETCLOSE handle=4

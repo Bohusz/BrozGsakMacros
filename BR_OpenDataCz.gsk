@@ -1,0 +1,16 @@
+#*******************************************
+# MacVersion = 1.0
+# MacDescription = BR Naètení CZ OpenData polygonù
+# MacAuthor = Bohusz
+# MacFileName = BR_OpenDataCz.gsk
+# MacUrl =
+#*******************************************
+
+$OPU_FOLDER = "C:\Users\Bohusz\AppData\Roaming\gsak\Macros\OpenData CZ\CZ-OPÚ\*.pgon"
+$ORP_FOLDER = "C:\Users\Bohusz\AppData\Roaming\gsak\Macros\OpenData CZ\CZ-ORP\*.pgon"
+$SOP_FOLDER = "C:\Users\Bohusz\AppData\Roaming\gsak\Macros\OpenData CZ\CZ-SOP\*.pgon"
+
+$result = GetPolygon("Y", $SOP_FOLDER)
+$result = GetPolygon("S update=[Praha]", $SOP_FOLDER)
+$result = GetPolygon("{PoverenyUrad}", $OPU_FOLDER)
+$result = GetPolygon("{MalyOkres}", $ORP_FOLDER)
