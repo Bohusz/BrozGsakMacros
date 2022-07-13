@@ -1,5 +1,5 @@
 #*******************************************
-# MacVersion = 1.10
+# MacVersion = 1.11
 # MacDescription = PrepareFieldNotes
 # MacAuthor = roztocil
 # MacFileName = BR_PrepareFieldNotes.gsk
@@ -35,6 +35,8 @@
 # 1.10 2019-06-17:
 #    - Do generovaných Field Notes se novì vkládá log pøipravený v GSAK (mzi datum
 #      a "more...") a GSAK poznámka (obvykle obsahuje pùvodní Field Note (za "more...").
+# 1.11 2021-11-20:
+#    - Oprava detekce prázdného GSAK logu.
 #**************************************************************************************
 
 DECLARE var=$NULL type=NUMERIC
@@ -130,7 +132,7 @@ WHILE NOT($_EOL)
     $logText = "$logText[*more...*]($blog_url)"
   ENDIF
   $gsakNotes = REPLACE(CHR(10), "·", REPLACE(CHR(13), "", TRIM(EXTRACT($d_UserNote,"$~",1))))
-  IF REGEX("^\[\d+[.-]\d+[.-]\d+ +\d+:\d+,\s*[^\]]+]\s*\x22\x22\s*$", $gsakNotes)
+  IF REGEX("^\[\d+[.-]\d+[.-]\d+ +\d+:\d+,\s*[^\]]+]\s*\x22+s*$", $gsakNotes)
     $gsakNotes = ""
   ENDIF
   IF NOT(ISEMPTY($gsakNotes))
