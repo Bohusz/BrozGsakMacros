@@ -1,10 +1,12 @@
 #*******************************************
-# MacVersion = 1.3
+# MacVersion = 1.4
 # MacDescription = BR_UpdatePublished
 # MacAuthor = roztocil
 # MacFileName = BR_UpdatePublished.gsk
 # MacUrl =
 #*******************************************
+# 2022-07-12, 1.4 - zjiöùuje takÈ, zda jiû m·m zalogov·no, ukl·d· se do "FoundItLogged"
+#                 - oprava: do "nalezeno" zahrnuto i "Attended" a "Webcam Photo Taken"
 # 2018-11-04, 1.3 - pokud polÌËka (Published, ArchivedOn) dosud neexistujÌ, jsou vytvo¯ena.
 #                 - pouûitÌ "konstant" s n·zvy polÌËek mÌsto liter·l˘ rozpt˝len˝ch po kÛdu
 # 2015-12-31, 1.2 - podpora pro datum archivace
@@ -18,6 +20,7 @@
 #
 $PUBLISHED_DATE = "Published"
 $ARCHIVED_DATE  = "ArchivedOn"
+$FOUNDIT_LOGGED = "FoundItLogged"
 
 # Log types:
 #
@@ -41,10 +44,16 @@ $WRITE_NOTE_LOG = "Write note"
 
 # Inicializace.
 #
-$p_customField = $PUBLISHED_DATE
+$p_customFieldName = $PUBLISHED_DATE
+$p_customFieldType = "date"
 GOSUB name=prepareCustomField
 
-$p_customField = $ARCHIVED_DATE
+$p_customFieldName = $ARCHIVED_DATE
+$p_customFieldType = "date"
+GOSUB name=prepareCustomField
+
+$p_customFieldName = $FOUNDIT_LOGGED
+$p_customFieldType = "Boolean"
 GOSUB name=prepareCustomField
 
 # Processing.
@@ -59,7 +68,7 @@ WHILE NOT($_EOL)
   SHOWSTATUS msg="$i/$_Count $d_code - $d_name"
   $v_published = CustomGet($PUBLISHED_DATE)
   $v_archived  = CustomGet($ARCHIVED_DATE)
-
+  $v_fiLogged  = 0
 
   #IF ($v_published = "")
     $r = SQLITE("sql", "SELECT lDate, lType FROM logs WHERE (lType IN ('$PUBLISH_LOG', '$ARCHIVE_LOG') OR lType = '$FOUND_LOG' AND lIsOwner) AND lParent = '$d_Code'", "sqlget=0")
@@ -73,14 +82,17 @@ WHILE NOT($_EOL)
 
       CASE $v_logType = $PUBLISH_LOG
           $r = CustomPut($PUBLISHED_DATE, $v_logDate)
+          GOSUB name=checkCustomOperation
 
       CASE $v_logType = $ARCHIVE_LOG
           $r = CustomPut($ARCHIVED_DATE, $v_logDate)
+          GOSUB name=checkCustomOperation
 
-      CASE $v_logType = $FOUND_LOG
+      CASE $v_logType = $FOUND_LOG OR $v_logType = $ATTENDED_LOG OR $v_logType = $PHOTO_TAKEN_LOG
           IF ($d_FoundByMeDate = [00000000])
             $d_FoundByMeDate = SQLTODATE($v_logDate)
           ENDIF    
+          $v_fiLogged = 1
       ENDCASE
 
       IF LEFT($r, 7) = "*Error*"
@@ -93,6 +105,8 @@ WHILE NOT($_EOL)
     ENDWHILE
     SQLGETCLOSE
   #ENDIF
+  $r = CustomPut($FOUNDIT_LOGGED, "$v_fiLogged")
+  GOSUB name=checkCustomOperation
 
   GOTO position=NEXT
 ENDWHILE
@@ -102,9 +116,19 @@ TRANSACTION action=END
 GOTO position=TOP
 
 BEGINSUB name=prepareCustomField
-  # $p_customField - jmÈno polÌËka
+  # $p_customFieldName - jmÈno polÌËka
+  # $p_customFieldType - jmÈno polÌËka
   #
-  IF CustomConfig("Get", $p_customField) = ""
-    $x = CustomConfig("Add", "$p_customField,date,Global")
+  IF CustomConfig("Get", $p_customFieldName) = ""
+    $r = CustomConfig("Add", "$p_customFieldName,$p_customFieldType,Global")
+    GOSUB name=checkCustomOperation
+  ENDIF
+ENDSUB
+
+BEGINSUB name=checkCustomOperation
+  # $r - v˝sledek
+  #
+  IF $r <> ""
+    PAUSE msg=$r
   ENDIF
 ENDSUB
