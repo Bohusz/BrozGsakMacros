@@ -1,19 +1,24 @@
-#*******************************************
-# MacVersion = 1.0
+#******************************************************************************************
+# MacVersion = 1.01
 # MacDescription = Download FieldNotes from Geocaching.com
 # MacAuthor = Bohusz
 # MacFileName = BR_DownloadPendingFieldNotes.gsk
 # MacUrl =
-#*******************************************
+#******************************************************************************************
+# 2022-07-17 1.01 - Možnost proèištìní Field Notes na Geocaching.com.
+#******************************************************************************************
 #
 $OUTPUT_FILENAME = "$_appData\fieldNotes\pending\pending_field-notes_#TSTAMP#.txt"
 $DOWNLOAD_LOGDRAFTS_FIELDS  = "referenceCode,geocacheCode,loggedDate,geocacheLogType,note"
 $TAKE_MAX = 50
+$ARRAY_SIZE = 10000
 #
 GOSUB name=resetFieldNotesVariables
 $v_skip = 0
 $v_batchRecords = -1
 $v_totalRecords = 0
+ARRAY(1, 0) = "$ARRAY_SIZE"
+ARRAY(1, -1) = ""
 #
 $p_datetime = DATETOSTRING($_today)+$_time
 GOSUB name=toTStamp
@@ -54,6 +59,7 @@ WHILE $v_batchRecords < 0 OR $v_batchRecords = $TAKE_MAX
          $p_text = $v_logtext
          GOSUB name=normalizeLogText
          $p_text = "$v_cacheCode,$v_logTime,$v_logType,$r_text$_CRLF"
+         ARRAY(1, $v_totalRecords+1) = "$v_refCode,$p_text"
          GOSUB name=WriteTextToFile
          #
          $v_batchRecords = $v_batchRecords + 1
@@ -65,13 +71,11 @@ WHILE $v_batchRecords < 0 OR $v_batchRecords = $TAKE_MAX
    $v_skip = $v_totalRecords
 ENDWHILE
 
-## MSGOK msg=$v_response
-$xx_question = "$v_totalRecords naètených field notes uloženo do souboru$_CRLF$_CRLF"
-$xx_question = "$xx_question$v_outputFileName$_CRLF$_CRLF"
-$xx_question = $xx_question + "Chcete je naèíst do tabulky PublishLogs?"
-IF YESNO($xx_question)
-   GcPublishFetch type=FILE file=$v_outputFileName
-ENDIF
+$p_question = "<p>$v_totalRecords naètených field notes uloženo do souboru</p><br/>"
+$p_question = "$p_question<p><b>$v_outputFileName</b>.</pre><br/>"
+$p_question = "$p_question<p>Chcete je naèíst do tabulky PublishLogs?</p>"
+$p_question = "$p_question<p>Nebo chcete odstranit již zalogované položky?</p>"  
+GOSUB name=readForm
 
 BEGINSUB name=resetFieldNotesVariables
    $v_refCode = ""
@@ -95,6 +99,109 @@ BEGINSUB name=normalizeLogText
    $r_text = REPLACE("[size=1]", "",  $r_text)
    $r_text = REPLACE("[/size]",  "",  $r_text)
 ENDSUB
+
+BEGINSUB name=removeLogged
+   $v_removed = 0
+   $i = 1
+   WHILE $i <= $ARRAY_SIZE AND ARRAY(1, $i) <> ""
+      $v_line = ARRAY(1, $i)
+      $v_refCode   = CSVGET($v_line, "1")
+      $v_cacheCode = CSVGET("*", "2")
+      $v_logDate   = SUBSTR(CSVGET("*", "3"), 1, 10)
+      $v_logType   = REPLACE("'", "''", CSVGET("*", "4"))
+
+      $x = SQLITE("sql", "SELECT * FROM logs WHERE lparent = '$v_cacheCode' AND ldate = '$v_logDate' AND lisowner AND UPPER(ltype) = UPPER('$v_logType')", "sqlget=1")
+      IF NOT($_SqlEol1)
+         $v_cache   = sqlget("lparent", 1)
+         $v_date    = sqlget("ldate", 1)
+         $v_logger  = sqlget("lby", 1)
+         $v_logtype = sqlget("ltype", 1)
+         $msg = "$v_cache: $v_logType $v_date $v_logger"
+      ELSE
+         $msg = "NOTFOUND"
+      ENDIF
+      SQLGETCLOSE handle=1
+
+      IF $msg <> "NOTFOUND"
+         SHOWSTATUS msg="$msg" height=500 width=350 mtype=MULTI display=ON title="Odstranìní již zalogovaných Field Notes"
+         $x = GCAPI2("logdrafts/$v_refCode", "DELETE", "{}", "Removing Field Note $v_refCode")
+         IF $_GcApiError
+            MSGOK msg=$x
+            BREAK
+         ENDIF
+         $v_removed = $v_removed + 1
+      ENDIF
+      $i = $i + 1
+   ENDWHILE
+
+   SHOWSTATUS msg="" height=500 width=350 mtype=MULTI display=ON title="Odstranìní již zalogovaných Field Notes"
+   SHOWSTATUS msg="Odstranìno $v_removed FieldNotes." height=500 width=350 mtype=MULTI display=ON title="Odstranìní již zalogovaných Field Notes"
+   DELAY ms=7500
+ENDSUB
+
+BEGINSUB name=readForm
+   WHILE TRUE
+      ## MSGOK msg=$v_response
+      $form = EDITFORM($form, "message", "Caption", $p_question)
+      $r_response = FORM($form,"")
+
+      BEGINCASE
+      CASE $r_response = "btnLoad"
+         GcPublishFetch type=FILE file=$v_outputFileName
+         BREAK
+      CASE $r_response = "btnRemove"
+         GOSUB name=removeLogged
+         BREAK
+      OTHERWISE
+         BREAK
+      ENDCASE
+   ENDWHILE
+ENDSUB
+
+<Data> VarName=$form
+Name = Form1
+  Type = Form
+  Delay = 120
+  Height = 175
+  Width = 675
+  Caption = Field Notes naèteny
+
+Name = message
+  Type = Label
+  Left = 8
+  Top = 8
+  Width = 332
+  Height = 100
+  Caption = xxx
+
+Name = btnLoad
+  Type = Button
+  Height = 25
+  Left = 8
+  Top = 110
+  Width = 150
+  Caption = Naèíst do Publish Logs
+
+Name = btnRemove
+  Type = Button
+  Height = 25
+  Left = 166
+  Top = 110
+  Width = 150
+  Caption = Odstranit již zalogované
+
+Name = btnCancel
+  Type = Button
+  Height = 25
+  Left = 585
+  Top = 110
+  Width = 75
+  Escape = Yes
+  Caption = Storno
+
+<enddata>
+
+
 ##############################################################################
 ##
 ## PØEVZATO Z "BR_PrepareFieldNotes.gsk"
