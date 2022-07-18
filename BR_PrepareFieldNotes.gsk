@@ -37,6 +37,8 @@
 #      a "more...") a GSAK poznámka (obvykle obsahuje pùvodní Field Note (za "more...").
 # 1.11 2021-11-20:
 #    - Oprava detekce prázdného GSAK logu.
+# 1.12 2022-07-16:
+#    - Doplnìno tlaèítko pro pøímé nahrání do Publish Logs.
 #**************************************************************************************
 
 DECLARE var=$NULL type=NUMERIC
@@ -262,6 +264,12 @@ BEGINSUB name=ReadFinalForm
          GOSUB name=UploadFieldNotes
          EXITSUB
 
+      CASE $result = "GcPublishButton"
+         $p_filename = $TargetFieldNotesFile
+         $p_text     = $PreparedFieldNotes
+         GOSUB name=GcUploadFieldNotesFile
+         EXITSUB
+
       CASE $result = "CloseButton" OR $result = "SystemExit" OR $result = "DelayExit"
          EXITSUB
 
@@ -293,6 +301,10 @@ BEGINSUB name=UploadFieldNotes
 
   $xx = LIST("allDrafts", "destroy", "")
   SHOWSTATUS msg="Finished uploading $xx_draftCount log drafts." display=OFF
+ENDSUB
+
+BEGINSUB name=GcUploadFieldNotesFile
+  GCPUBLISHFETCH type=FILE file=$p_fileName
 ENDSUB
 
 BEGINSUB name=ParseFieldNoteLineToParameters
@@ -572,6 +584,15 @@ Name = PreparedFilePath
   Width = 769
   Taborder = 2
 
+Name = OpenButton
+  Type = Button
+  Height = 25
+  Left = 8
+  Top = 360
+  Width = 81
+  Taborder = 15
+  Caption = Open File
+
 Name = UpdateButton
   Type = Button
   Height = 25
@@ -580,6 +601,15 @@ Name = UpdateButton
   Width = 153
   Taborder = 12
   Caption = Save Changes to the File
+
+Name = GcPublishButton
+  Type = Button
+  Height = 25
+  Left = 257
+  Top = 360
+  Width = 153
+  Taborder = 13
+  Caption = Load to GSAK Publish Logs
 
 Name = UploadButton
   Type = Button
@@ -600,14 +630,5 @@ Name = CloseButton
   Width = 75
   Taborder = 14
   Caption = Close
-
-Name = OpenButton
-  Type = Button
-  Height = 25
-  Left = 8
-  Top = 360
-  Width = 81
-  Taborder = 15
-  Caption = Open File
 
 <enddata>
