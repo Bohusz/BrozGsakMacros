@@ -1,0 +1,8 @@
+# zakážeme všechno
+**
+**/.*
+#
+# povolíme jen ty moje
+#
+!/BR_*.gsk
+/OpenData CZ
